@@ -1,0 +1,648 @@
+/* Wallet Container - Full Page Layout */
+.walletContainer {
+    min-height: 100vh;
+    background: #f5f7fa;
+    padding: 0;
+    margin: 0;
+}
+
+/* Header */
+.walletHeader {
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 20px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.headerContent {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.backButton {
+    background: #3b82f6;
+    border: none;
+    color: #ffffff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.backButton:hover {
+    background: #2563eb;
+    color: #fff;
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.walletTitle {
+    color: #1f2937;
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+}
+
+/* Wallet Body */
+.walletBody {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+/* Balance Card */
+.balanceCard {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.balanceInfo {
+    flex: 1;
+    min-width: 200px;
+}
+
+.balanceLabel {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 0 0 12px 0;
+}
+
+.balanceAmount {
+    color: #fff;
+    font-size: 48px;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1;
+}
+
+.balanceActions {
+    display: flex;
+    gap: 12px;
+}
+
+.quickAction {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    backdrop-filter: blur(10px);
+}
+
+.quickAction:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+}
+
+.quickAction.active {
+    background: #fff;
+    color: #3b82f6;
+    border-color: #fff;
+}
+
+/* Alert Messages */
+.alertMessage {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.1);
+}
+
+.successAlert {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #059669;
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 1px 3px rgba(5, 150, 105, 0.1);
+}
+
+/* Tabs Container */
+.tabsContainer {
+    margin-bottom: 24px;
+}
+
+.tabs {
+    display: flex;
+    gap: 8px;
+    background: #ffffff;
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.tabs button {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #6b7280;
+    padding: 14px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.tabs button:hover {
+    color: #3b82f6;
+    background: #f3f4f6;
+}
+
+.tabs .activeTab {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Content Card */
+.contentCard {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 32px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.tabContent {
+    min-height: 400px;
+}
+
+/* Section Title */
+.sectionTitle {
+    color: #1f2937;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+/* Quick Amount Buttons */
+.quickAmounts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.amountBtn {
+    background: #ffffff;
+    border: 2px solid #e5e7eb;
+    color: #374151;
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.amountBtn:hover {
+    border-color: #3b82f6;
+    color: #3b82f6;
+    background: #eff6ff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.15);
+}
+
+/* Available Balance Display */
+.availableBalance {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 16px;
+    color: #374151;
+}
+
+.balanceValue {
+    font-size: 20px;
+    font-weight: 700;
+    color: #3b82f6;
+}
+
+/* Form Styles */
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.formGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.formGroup label {
+    color: #374151;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.formGroup input,
+.formGroup select {
+    background: #ffffff;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px 16px;
+    color: #1f2937;
+    font-size: 16px;
+    transition: all 0.2s;
+}
+
+.formGroup input:focus,
+.formGroup select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    background: #ffffff;
+}
+
+.formGroup input:disabled,
+.formGroup select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.formGroup small {
+    color: #6b7280;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.amountInput {
+    font-size: 20px;
+    font-weight: 600;
+    text-align: center;
+}
+
+/* Primary Button */
+.primaryButton {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 16px 32px;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 8px;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.primaryButton:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+}
+
+.primaryButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Help Text */
+.helpText {
+    color: #6b7280;
+    font-size: 14px;
+    text-align: center;
+    margin-top: 16px;
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+/* Info Box */
+.infoBox {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+    box-shadow: 0 1px 3px rgba(251, 191, 36, 0.1);
+}
+
+.infoText {
+    color: #92400e;
+    font-size: 14px;
+    margin: 0;
+    line-height: 1.6;
+}
+
+/* History Section */
+.historySection {
+    width: 100%;
+}
+
+.loadingState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    gap: 16px;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e5e7eb;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loadingState p {
+    color: #6b7280;
+    font-size: 16px;
+}
+
+.emptyState {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6b7280;
+}
+
+.emptyIcon {
+    font-size: 64px;
+    margin-bottom: 16px;
+}
+
+.emptyState p {
+    font-size: 18px;
+    font-weight: 600;
+    color: #374151;
+    margin: 8px 0;
+}
+
+.emptyState small {
+    font-size: 14px;
+    color: #9ca3af;
+}
+
+/* Transaction List */
+.transactionsList {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.transactionCard {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.transactionCard:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.transactionHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+    gap: 16px;
+}
+
+.transactionLeft {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    flex: 1;
+}
+
+.transactionIcon {
+    font-size: 32px;
+    line-height: 1;
+}
+
+.transactionInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.transactionType {
+    color: #1f2937;
+    font-weight: 700;
+    font-size: 16px;
+    text-transform: capitalize;
+}
+
+.transactionDescription {
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.transactionRight {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.transactionAmount {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.transactionAmount.positive {
+    color: #10b981;
+}
+
+.transactionAmount.negative {
+    color: #ef4444;
+}
+
+.statusBadge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.statusBadge.pending {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.statusBadge.approved,
+.statusBadge.completed {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.statusBadge.rejected {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.transactionFooter {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.transactionDate {
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+.balanceChange {
+    color: #6b7280;
+    font-size: 13px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .walletHeader {
+        padding: 16px;
+    }
+
+    .headerContent {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .walletTitle {
+        font-size: 24px;
+    }
+
+    .walletBody {
+        padding: 16px;
+    }
+
+    .balanceCard {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 24px;
+    }
+
+    .balanceAmount {
+        font-size: 36px;
+    }
+
+    .balanceActions {
+        width: 100%;
+    }
+
+    .quickAction {
+        flex: 1;
+    }
+
+    .contentCard {
+        padding: 20px;
+    }
+
+    .tabs {
+        flex-direction: column;
+    }
+
+    .tabs button {
+        width: 100%;
+    }
+
+    .quickAmounts {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .transactionHeader {
+        flex-direction: column;
+    }
+
+    .transactionRight {
+        align-items: flex-start;
+        width: 100%;
+    }
+
+    .transactionFooter {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .balanceAmount {
+        font-size: 32px;
+    }
+
+    .quickAmounts {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .amountBtn {
+        padding: 12px;
+        font-size: 14px;
+    }
+}

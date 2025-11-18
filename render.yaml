@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: gemini-ludo-game
+    env: node
+    region: frankfurt
+    plan: free
+    branch: main
+    buildCommand: npm run render:build
+    startCommand: npm run render:start
+    rootDir: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        generateValue: true
+      - key: CONNECTION_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+

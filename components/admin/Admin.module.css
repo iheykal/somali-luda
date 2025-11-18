@@ -1,0 +1,1297 @@
+.adminContainer {
+    min-height: 100vh;
+    background: #f5f7fa;
+    padding: 20px;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.adminCard {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 16px;
+    padding: 30px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e5e7eb;
+    box-sizing: border-box;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.header h1 {
+    font-size: 28px;
+    color: #333;
+    margin: 0 0 5px 0;
+}
+
+.header p {
+    color: #666;
+    margin: 0;
+}
+
+.backButton {
+    padding: 10px 20px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.backButton:hover {
+    background: #2563eb;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #f0f0f0;
+    overflow-x: auto;
+}
+
+.tabs button {
+    padding: 12px 20px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    color: #666;
+    transition: all 0.3s;
+    white-space: nowrap;
+}
+
+.tabs button:hover {
+    color: #3b82f6;
+}
+
+.activeTab {
+    color: #3b82f6 !important;
+    border-bottom: 3px solid #3b82f6 !important;
+}
+
+.tabContent {
+    min-height: 400px;
+}
+
+.error {
+    background-color: #fee;
+    color: #c33;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+}
+
+.emptyState {
+    text-align: center;
+    padding: 80px 20px;
+    font-size: 20px;
+    font-weight: 600;
+    background: #f8f9fa;
+    border-radius: 16px;
+    border: 2px solid #e5e7eb;
+    margin: 20px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.transactionsList {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.transactionsList h2 {
+    color: #333;
+    font-size: 22px;
+    margin: 0 0 20px 0;
+}
+
+.transactionCard {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    border-left: 5px solid #3b82f6;
+    border-right: 1px solid #e5e7eb;
+    border-top: 1px solid #e5e7eb;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+}
+
+.transactionCard:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+}
+
+.transactionInfo {
+    flex: 1;
+}
+
+.transactionInfo h3 {
+    color: #111827;
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0 0 16px 0;
+    letter-spacing: 0.5px;
+}
+
+.transactionInfo p {
+    color: #111827;
+    font-size: 15px;
+    margin: 0 0 10px 0;
+    font-weight: 500;
+    line-height: 1.6;
+}
+
+.transactionInfo p:last-child {
+    margin-bottom: 0;
+    color: #6b7280;
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.transactionHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.type {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+}
+
+.amount {
+    font-size: 24px;
+    font-weight: bold;
+    color: #3b82f6;
+}
+
+.userDetails {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.userDetails p {
+    margin: 0;
+    color: #555;
+    font-size: 14px;
+}
+
+.userDetails strong {
+    color: #333;
+}
+
+.transactionActions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 140px;
+}
+
+.approveButton,
+.rejectButton {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 140px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    letter-spacing: 0.3px;
+}
+
+.approveButton {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+}
+
+.approveButton:hover:not(:disabled) {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+}
+
+.approveButton:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.rejectButton {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+.rejectButton:hover:not(:disabled) {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+}
+
+.rejectButton:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.approveButton:disabled,
+.rejectButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.status {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.statusApproved {
+    background: #c8e6c9;
+    color: #2e7d32;
+}
+
+.statusPending {
+    background: #fff9c4;
+    color: #f57f17;
+}
+
+.statusRejected {
+    background: #ffcdd2;
+    color: #c62828;
+}
+
+.usersList {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.usersList h2 {
+    color: #333;
+    font-size: 22px;
+    margin: 0 0 20px 0;
+}
+
+.usersGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 24px;
+}
+
+.userCard {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-radius: 16px;
+    padding: 24px;
+    border: 2px solid #e5e7eb;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.userCard::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.userCard:hover::before {
+    transform: scaleX(1);
+}
+
+.userCard:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    border-color: #3b82f6;
+}
+
+.userCard h3 {
+    margin: 0 0 16px 0;
+    color: #111827;
+    font-size: 22px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.userCard h3::before {
+    content: '👤';
+    font-size: 24px;
+    filter: grayscale(0.2);
+}
+
+.userCard p {
+    margin: 10px 0;
+    color: #374151;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.balance {
+    font-weight: 600;
+    color: #3b82f6 !important;
+    font-size: 16px !important;
+    margin-top: 10px !important;
+}
+
+.date {
+    font-size: 12px !important;
+    color: #999 !important;
+}
+
+.active {
+    color: #4caf50 !important;
+    font-weight: 600 !important;
+}
+
+.inactive {
+    color: #f44336 !important;
+    font-weight: 600 !important;
+}
+
+.statsContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.statsContainer h2 {
+    color: #333;
+    font-size: 22px;
+    margin: 0 0 20px 0;
+}
+
+.statsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.statCard {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-radius: 12px;
+    padding: 30px;
+    text-align: center;
+    color: white;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.statCard h3 {
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    opacity: 0.9;
+}
+
+.statValue {
+    margin: 0;
+    font-size: 36px;
+    font-weight: bold;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .adminCard {
+        padding: 20px;
+    }
+
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .backButton {
+        width: 100%;
+    }
+
+    .transactionCard {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .transactionActions {
+        width: 100%;
+        flex-direction: row;
+    }
+
+    .approveButton,
+    .rejectButton {
+        flex: 1;
+    }
+
+    .usersGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .statsGrid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ===== REVENUE DASHBOARD STYLES ===== */
+.revenueContainer {
+    padding: 20px 0;
+}
+
+.revenueHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.revenueHeader h2 {
+    color: #333;
+    font-size: 24px;
+    margin: 0;
+}
+
+.revenueFilters {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.revenueFilterBtn {
+    padding: 10px 20px;
+    background: #f5f5f5;
+    border: 2px solid #e0e0e0;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #666;
+    transition: all 0.3s;
+}
+
+.revenueFilterBtn:hover {
+    background: #e8e8e8;
+    border-color: #d0d0d0;
+}
+
+.revenueFilterActive {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border: 2px solid transparent;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: 600;
+    color: white;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+.revenueStats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 40px;
+}
+
+.revenueCard {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    padding: 30px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 8px 30px rgba(59, 130, 246, 0.25);
+    transition: transform 0.3s;
+}
+
+.revenueCard:hover {
+    transform: translateY(-5px);
+}
+
+.revenueIcon {
+    font-size: 48px;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+}
+
+.revenueInfo {
+    flex: 1;
+    color: white;
+}
+
+.revenueInfo h3 {
+    font-size: 14px;
+    margin: 0 0 10px 0;
+    opacity: 0.95;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.revenueAmount {
+    font-size: 32px;
+    font-weight: bold;
+    margin: 0 0 5px 0;
+}
+
+.revenueLabel {
+    font-size: 12px;
+    opacity: 0.85;
+}
+
+/* Revenue Breakdown Table */
+.revenueBreakdown {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    border: 2px solid #f0f0f0;
+}
+
+.revenueBreakdown h3 {
+    color: #333;
+    font-size: 20px;
+    margin: 0 0 20px 0;
+}
+
+.revenueTable {
+    overflow-x: auto;
+}
+
+.revenueTableHeader {
+    display: grid;
+    grid-template-columns: 150px 100px 2fr 150px 120px 120px 120px;
+    gap: 15px;
+    padding: 15px 20px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-radius: 10px;
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+
+.revenueTableRow {
+    display: grid;
+    grid-template-columns: 150px 100px 2fr 150px 120px 120px 120px;
+    gap: 15px;
+    padding: 15px 20px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+    transition: all 0.3s;
+}
+
+.revenueTableRow:hover {
+    background: #f9fafb;
+    border-color: #d1d5db;
+    transform: translateX(5px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.revenueTableRow span {
+    font-size: 14px;
+    color: #555;
+}
+
+.withdrawalAmount {
+    font-weight: 600;
+    color: #333 !important;
+}
+
+.platformFeeAmount {
+    font-weight: 700;
+    color: #4caf50 !important;
+}
+
+.userReceiveAmount {
+    font-weight: 600;
+    color: #2196f3 !important;
+}
+
+/* Mobile Responsive for Revenue */
+@media (max-width: 768px) {
+    .revenueHeader {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .revenueFilters {
+        width: 100%;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+    }
+
+    .revenueFilterBtn,
+    .revenueFilterActive {
+        flex-shrink: 0;
+    }
+
+    .revenueStats {
+        grid-template-columns: 1fr;
+    }
+
+    .revenueCard {
+        padding: 20px;
+    }
+
+    .revenueAmount {
+        font-size: 28px;
+    }
+
+    .revenueTableHeader,
+    .revenueTableRow {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .revenueTableHeader span,
+    .revenueTableRow span {
+        padding: 8px 0;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .revenueTableHeader span:first-child,
+    .revenueTableRow span:first-child {
+        border-top: 2px solid #e0e0e0;
+        padding-top: 12px;
+    }
+}
+
+/* Responsive adjustments for accounting ledger */
+@media (max-width: 1200px) {
+    .revenueTableHeader,
+    .revenueTableRow {
+        grid-template-columns: 120px 80px 1.5fr 120px 100px 100px 100px;
+        font-size: 12px;
+    }
+}
+
+/* ===== QUICKBOOKS-STYLE LEDGER TABLE ===== */
+.ledgerContainer {
+    padding: 20px 0;
+}
+
+.ledgerSummary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.ledgerStat {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-radius: 12px;
+    padding: 25px;
+    text-align: center;
+    color: white;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.ledgerStat h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    opacity: 0.9;
+}
+
+.ledgerStat p {
+    margin: 0;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.ledgerEntries {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.ledgerEntry {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-left: 4px solid #3b82f6;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.ledgerEntry p {
+    margin: 0;
+    color: #333;
+}
+
+.ledgerTable {
+    overflow-x: auto;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.ledgerTableHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-radius: 10px 10px 0 0;
+    color: white;
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 3px solid #1d4ed8;
+}
+
+.ledgerTableHeader span {
+    display: flex;
+    align-items: center;
+    color: white;
+}
+
+.ledgerTableRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #e8e8e8;
+    min-height: 60px;
+}
+
+.ledgerTableRow:hover {
+    background: #f5f5f5 !important;
+    transform: translateX(3px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.ledgerTableRow:last-child {
+    border-radius: 0 0 10px 10px;
+}
+
+.ledgerTableRow span {
+    display: flex;
+    align-items: center;
+    word-break: break-word;
+}
+
+/* Mobile Responsive for Ledger Table */
+@media (max-width: 968px) {
+    .ledgerTableHeader,
+    .ledgerTableRow {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 15px;
+    }
+
+    .ledgerTableHeader span,
+    .ledgerTableRow span {
+        width: 100% !important;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .ledgerTableHeader span::before,
+    .ledgerTableRow span::before {
+        content: attr(data-label);
+        font-weight: 600;
+        margin-right: 10px;
+    }
+    
+    .ledgerTableRow {
+        border-left-width: 6px;
+        margin-bottom: 15px;
+        border-radius: 8px;
+    }
+}
+
+/* ===== USER STATS MODAL STYLES ===== */
+.userStatsModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.userStatsContent {
+    background: white;
+    border-radius: 20px;
+    padding: 40px;
+    max-width: 900px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modalHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 3px solid #f0f0f0;
+}
+
+.modalHeader h2 {
+    color: #333;
+    font-size: 28px;
+    margin: 0;
+}
+
+.closeBtn {
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.closeBtn:hover {
+    background: #d32f2f;
+    transform: rotate(90deg) scale(1.1);
+}
+
+.userStatsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 40px;
+}
+
+.userStatsGrid .statCard {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-radius: 15px;
+    padding: 25px;
+    text-align: left;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    transition: transform 0.3s;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.userStatsGrid .statCard:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+}
+
+.userStatsGrid .statCard.netProfitPositive {
+    background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+}
+
+.userStatsGrid .statCard.netProfitNegative {
+    background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+}
+
+.statIcon {
+    font-size: 42px;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+}
+
+.statInfo {
+    flex: 1;
+}
+
+.statInfo h3 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    opacity: 0.95;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.statInfo .statValue {
+    margin: 0;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.recentGamesSection {
+    margin-top: 40px;
+}
+
+.recentGamesSection h3 {
+    color: #333;
+    font-size: 22px;
+    margin: 0 0 20px 0;
+    padding-bottom: 15px;
+    border-bottom: 3px solid #f0f0f0;
+}
+
+.recentGamesList {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.gameItem {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    padding: 20px;
+    border-radius: 12px;
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr 1.5fr 2fr 1fr;
+    gap: 15px;
+    align-items: center;
+    transition: all 0.3s;
+    border-left: 4px solid #3b82f6;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.gameItem:hover {
+    background: #f9fafb;
+    border-color: #d1d5db;
+    transform: translateX(5px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.gameDate {
+    font-size: 13px;
+    color: #666;
+    font-weight: 500;
+}
+
+.gameBet {
+    font-size: 14px;
+    color: #333;
+    font-weight: 600;
+}
+
+.gameWon {
+    background: #c8e6c9;
+    color: #2e7d32;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.gameLost {
+    background: #ffcdd2;
+    color: #c62828;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.gameWinner {
+    font-size: 14px;
+    color: #555;
+}
+
+.gamePayout {
+    font-size: 14px;
+    color: #4caf50;
+    font-weight: 700;
+}
+
+.gameOpponents {
+    font-size: 13px;
+    color: #555;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+.noGamesMessage {
+    text-align: center;
+    padding: 60px 20px;
+    color: #999;
+    font-size: 18px;
+    background: #f8f9fa;
+    border-radius: 15px;
+    margin-top: 20px;
+}
+
+/* Mobile Responsive for User Stats Modal */
+@media (max-width: 768px) {
+    .userStatsContent {
+        padding: 25px;
+        max-height: 95vh;
+    }
+
+    .modalHeader h2 {
+        font-size: 22px;
+    }
+
+    .userStatsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .gameItem {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .statInfo .statValue {
+        font-size: 24px;
+    }
+
+    .statIcon {
+        font-size: 36px;
+    }
+}
+
+/* ===== SUCCESS VERIFICATION MODAL STYLES ===== */
+.successModalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10001;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.successModal {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border-radius: 25px;
+    padding: 60px 80px;
+    text-align: center;
+    box-shadow: 0 25px 80px rgba(16, 185, 129, 0.4);
+    animation: slideUpScale 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-width: 500px;
+    width: 90%;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+
+@keyframes slideUpScale {
+    0% {
+        opacity: 0;
+        transform: translateY(50px) scale(0.8);
+    }
+    50% {
+        transform: translateY(-10px) scale(1.05);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.successIconContainer {
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.checkmark {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    display: block;
+    stroke-width: 3;
+    stroke: #fff;
+    stroke-miterlimit: 10;
+    margin: 0 auto;
+    box-shadow: inset 0px 0px 0px rgba(255, 255, 255, 0.2);
+    animation: checkmarkPulse 0.6s ease-out;
+}
+
+@keyframes checkmarkPulse {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+
+.checkmarkCircle {
+    stroke: white;
+    stroke-width: 3;
+    stroke-linecap: round;
+    fill: none;
+    stroke-dasharray: 166;
+    stroke-dashoffset: 166;
+    animation: strokeCircle 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
+@keyframes strokeCircle {
+    0% {
+        stroke-dashoffset: 166;
+    }
+    100% {
+        stroke-dashoffset: 0;
+    }
+}
+
+.checkmarkCheck {
+    stroke: white;
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 48;
+    stroke-dashoffset: 48;
+    animation: strokeCheck 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.6s forwards;
+}
+
+@keyframes strokeCheck {
+    0% {
+        stroke-dashoffset: 48;
+    }
+    100% {
+        stroke-dashoffset: 0;
+    }
+}
+
+.successTitle {
+    color: white;
+    font-size: 32px;
+    font-weight: bold;
+    margin: 0 0 15px 0;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    animation: fadeInUp 0.5s ease-out 0.3s both;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.successMessage {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 18px;
+    margin: 0 0 30px 0;
+    font-weight: 500;
+    animation: fadeInUp 0.5s ease-out 0.4s both;
+}
+
+.successCloseButton {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid white;
+    color: white;
+    padding: 12px 32px;
+    border-radius: 25px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 10px;
+    animation: fadeInUp 0.5s ease-out 0.5s both;
+}
+
+.successCloseButton:hover {
+    background: white;
+    color: #10b981;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+}
+
+/* Mobile Responsive for Success Modal */
+@media (max-width: 768px) {
+    .successModal {
+        padding: 50px 40px;
+    }
+
+    .checkmark {
+        width: 100px;
+        height: 100px;
+    }
+
+    .successTitle {
+        font-size: 26px;
+    }
+
+    .successMessage {
+        font-size: 16px;
+    }
+}
+

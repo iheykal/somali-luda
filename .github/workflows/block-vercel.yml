@@ -1,0 +1,16 @@
+name: Block Vercel Deployments
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block Vercel
+        run: |
+          echo "⚠️ Vercel deployments are disabled for this repository"
+          echo "This repository is deployed on Render only"
+          echo "If you see Vercel deployments, remove webhooks from GitHub settings"
+
