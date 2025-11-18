@@ -2322,9 +2322,29 @@ if (process.env.NODE_ENV === 'production') {
             });
         }
         
+        // Explicitly handle root path
+        app.get('/', (req, res) => {
+            const indexPath = path.join(absoluteFrontendPath, 'index.html');
+            if (!existsSync(indexPath)) {
+                console.error(`❌ index.html not found at: ${indexPath}`);
+                return res.status(500).json({ 
+                    error: 'Frontend not built',
+                    message: 'The frontend has not been built. Please run "npm run build" before starting the server.',
+                    expectedPath: indexPath
+                });
+            }
+            console.log('📄 Serving index.html for root path');
+            res.sendFile(indexPath, (err) => {
+                if (err) {
+                    console.error('Error serving index.html:', err);
+                    res.status(500).json({ error: 'Failed to serve frontend', details: err.message });
+                }
+            });
+        });
+        
         // Handle React routing - return index.html for all non-API routes
         // This must be after all API routes and static file serving
-        app.get('*', (req, res, next) => {
+        app.get('*', (req, res) => {
             // Don't serve index.html for API routes or socket.io
             if (req.path.startsWith('/api')) {
                 console.warn(`⚠️  API route not found: ${req.method} ${req.path}`);
@@ -2345,7 +2365,7 @@ if (process.env.NODE_ENV === 'production') {
             const hasExtension = /\.[a-zA-Z0-9]+$/.test(req.path);
             if (hasExtension) {
                 // Static file should have been served by express.static, but if we get here, it doesn't exist
-                const requestedFile = path.join(frontendPath, req.path);
+                const requestedFile = path.join(absoluteFrontendPath, req.path);
                 console.warn(`⚠️  Static file not found: ${req.path} (checked: ${requestedFile})`);
                 return res.status(404).json({ 
                     error: 'File not found',
@@ -2355,7 +2375,7 @@ if (process.env.NODE_ENV === 'production') {
             }
             
             // Serve index.html for all other routes (React Router)
-            const indexPath = path.join(frontendPath, 'index.html');
+            const indexPath = path.join(absoluteFrontendPath, 'index.html');
             if (!existsSync(indexPath)) {
                 console.error(`❌ index.html not found at: ${indexPath}`);
                 return res.status(500).json({ 
@@ -2365,6 +2385,7 @@ if (process.env.NODE_ENV === 'production') {
                 });
             }
             
+            console.log(`📄 Serving index.html for route: ${req.path}`);
             res.sendFile(indexPath, (err) => {
                 if (err) {
                     console.error('Error serving index.html:', err);
