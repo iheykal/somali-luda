@@ -1,0 +1,236 @@
+[1mdiff --git a/services/socketService.ts b/services/socketService.ts[m
+[1mdeleted file mode 100644[m
+[1mindex e6a5013..0000000[m
+[1m--- a/services/socketService.ts[m
+[1m+++ /dev/null[m
+[36m@@ -1,230 +0,0 @@[m
+[31m-import { io, Socket } from 'socket.io-client';[m
+[31m-[m
+[31m-class SocketService {[m
+[31m-  private socket: Socket | null = null;[m
+[31m-  private gameId: string | null = null;[m
+[31m-[m
+[31m-  private getDefaultSocketUrl(): string {[m
+[31m-    // First, check if environment variable is explicitly set (highest priority)[m
+[31m-    const envUrl = import.meta.env.VITE_SOCKET_URL;[m
+[31m-    if (envUrl && envUrl.trim() !== '' && envUrl !== 'http://localhost:3001') {[m
+[31m-      return envUrl.trim();[m
+[31m-    }[m
+[31m-[m
+[31m-    // Check if we're in a browser environment[m
+[31m-    if (typeof window !== 'undefined') {[m
+[31m-      const hostname = window.location.hostname;[m
+[31m-      const isProduction = hostname !== 'localhost' && hostname !== '127.0.0.1';[m
+[31m-[m
+[31m-      if (isProduction) {[m
+[31m-        // In production, use same origin (works when frontend and backend are on same domain)[m
+[31m-        // This is for Render deployment where both are served together[m
+[31m-        return window.location.origin;[m
+[31m-      }[m
+[31m-    }[m
+[31m-[m
+[31m-    // Development fallback[m
+[31m-    return 'http://localhost:3001';[m
+[31m-  }[m
+[31m-[m
+[31m-  connect(serverUrl: string = import.meta.env.VITE_SOCKET_URL || this.getDefaultSocketUrl()) {[m
+[31m-    if (this.socket?.connected) {[m
+[31m-      console.log('Already connected to server');[m
+[31m-      return;[m
+[31m-    }[m
+[31m-    [m
+[31m-    console.log('🔌 Connecting to socket server:', serverUrl);[m
+[31m-    console.log('🔌 Current hostname:', typeof window !== 'undefined' ? window.location.hostname : 'N/A');[m
+[31m-    [m
+[31m-    this.socket = io(serverUrl, {[m
+[31m-      transports: ['websocket'],[m
+[31m-      reconnection: true,[m
+[31m-      reconnectionDelay: 1000,[m
+[31m-      reconnectionAttempts: 5,[m
+[31m-    });[m
+[31m-[m
+[31m-    this.socket.on('connect', () => {[m
+[31m-      console.log('✅ Connected to server:', this.socket?.id, 'at', serverUrl);[m
+[31m-    });[m
+[31m-[m
+[31m-    this.socket.on('disconnect', (reason) => {[m
+[31m-      console.log('❌ Disconnected from server:', reason);[m
+[31m-      // If we were in a game, we might need to handle reconnection[m
+[31m-      if (this.gameId) {[m
+[31m-        console.warn('⚠️ Disconnected during game:', this.gameId);[m
+[31m-        // Attempt to reconnect[m
+[31m-        if (reason === 'io server disconnect') {[m
+[31m-          // Server disconnected, try to reconnect[m
+[31m-          this.socket.connect();[m
+[31m-        }[m
+[31m-      }[m
+[31m-    });[m
+[31m-    [m
+[31m-    this.socket.on('reconnect', (attemptNumber) => {[m
+[31m-      console.log('🔄 Reconnected to server after', attemptNumber, 'attempts');[m
+[31m-      if (this.gameId) {[m
+[31m-        console.log('✅ Reconnected during game:', this.gameId);[m
+[31m-      }[m
+[31m-    });[m
+[31m-[m
+[31m-    this.socket.on('connect_error', (error) => {[m
+[31m-      console.error('Connection error:', error);[m
+[31m-    });[m
+[31m-[m
+[31m-    // Listen for all events to debug[m
+[31m-    this.socket.onAny((eventName, ...args) => {[m
+[31m-      console.log('📨 Socket event received:', eventName, args);[m
+[31m-    });[m
+[31m-  }[m
+[31m-[m
+[31m-  isConnected(): boolean {[m
+[31m-    return this.socket?.connected || false;[m
+[31m-  }[m
+[31m-[m
+[31m-  getSocketId(): string | undefined {[m
+[31m-    return this.socket?.id;[m
+[31m-  }[m
+[31m-[m
+[31m-  searchMatch(playerName: string, betAmount: number = 0.5, userId?: string) {[m
+[31m-    // Ensure we're connected first[m
+[31m-    if (!this.socket || !this.socket.connected) {[m
+[31m-      this.connect();[m
+[31m-      // Wait for connection before emitting[m
+[31m-      this.socket?.once('connect', () => {[m
+[31m-        // Small delay to ensure connection is fully established[m
+[31m-        setTimeout(() => {[m
+[31m-          if (this.socket?.connected) {[m
+[31m-            this.socket.emit('search-match', { playerName, betAmount, userId });[m
+[31m-          }[m
+[31m-        }, 100);[m
+[31m-      });[m
+[31m-    } else {[m
+[31m-      // If already connected, emit immediately[m
+[31m-      this.socket.emit('search-match', { playerName, betAmount, userId });[m
+[31m-    }[m
+[31m-  }[m
+[31m-[m
+[31m-  cancelSearch() {[m
+[31m-    this.socket?.emit('cancel-search');[m
+[31m-  }[m
+[31m-[m
+[31m-  sendGameAction(action: any, playerId: string) {[m
+[31m-    if (!this.socket || !this.gameId) {[m
+[31m-      console.warn('Cannot send game action: socket or gameId not available', {[m
+[31m-        hasSocket: !!this.socket,[m
+[31m-        isConnected: this.socket?.connected,[m
+[31m-        gameId: this.gameId[m
+[31m-      });[m
+[31m-      return;[m
+[31m-    }[m
+[31m-    if (!this.socket.connected) {[m
+[31m-      console.error('❌ Cannot send game action: socket not connected');[m
+[31m-      // Try to reconnect[m
+[31m-      this.socket.connect();[m
+[31m-      return;[m
+[31m-    }[m
+[31m-    console.log('📤 Sending game action:', action.type, 'to game:', this.gameId);[m
+[31m-    this.socket.emit('game-action', { gameId: this.gameId, action, playerId });[m
+[31m-  }[m
+[31m-[m
+[31m-  sendGameStateUpdate(state: any) {[m
+[31m-    if (!this.socket || !this.gameId) {[m
+[31m-      console.warn('Cannot send game state: socket or gameId not available');[m
+[31m-      return;[m
+[31m-    }[m
+[31m-    this.socket.emit('game-state-update', { gameId: this.gameId, state });[m
+[31m-  }[m
+[31m-[m
+[31m-  onSearching(callback: (data: any) => void) {[m
+[31m-    this.socket?.on('searching', callback);[m
+[31m-  }[m
+[31m-[m
+[31m-  onMatchFound(callback: (data: { gameId: string; playerColor: string; opponentName: string }) => void) {[m
+[31m-    console.log('📡 Setting up match-found listener');[m
+[31m-    if (!this.socket) {[m
+[31m-      console.error('❌ Cannot set up match-found listener: socket is null');[m
+[31m-      return;[m
+[31m-    }[m
+[31m-    // Remove any existing listener first to avoid duplicates[m
+[31m-    this.socket.off('match-found');[m
+[31m-    // Set up the listener[m
+[31m-    this.socket.on('match-found', (data) => {[m
+[31m-      console.log('📨 Received match-found event in callback:', data);[m
+[31m-      this.gameId = data.gameId;[m
+[31m-      try {[m
+[31m-        callback(data);[m
+[31m-        console.log('✅ Match-found callback executed successfully');[m
+[31m-      } catch (error) {[m
+[31m-        console.error('❌ Error in match-found callback:', error);[m
+[31m-      }[m
+[31m-    });[m
+[31m-    console.log('✅ Match-found listener registered');[m
+[31m-  }[m
+[31m-[m
+[31m-  onSearchError(callback: (data: { message: string }) => void) {[m
+[31m-    this.socket?.on('search-error', callback);[m
+[31m-  }[m
+[31m-[m
+[31m-  onSearchCancelled(callback: () => void) {[m
+[31m-    this.socket?.on('search-cancelled', callback);[m
+[31m-  }[m
+[31m-[m
+[31m-  onGameAction(callback: (data: any) => void) {[m
+[31m-    this.socket?.on('game-action', callback);[m
+[31m-  }[m
+[31m-[m
+[31m-  onGameStateUpdate(callback: (data: any) => void) {[m
+[31m-    this.socket?.on('game-state-update', callback);[m
+[31m-  }[m
+[31m-[m
+[31m-  onJoinError(callback: (data: any) => void) {[m
+[31m-    this.socket?.on('join-error', callback);[m
+[31m-  }[m
+[31m-[m
+[31m-  onPlayerDisconnected(callback: (data: any) => void) {[m
+[31m-    this.socket?.on('player-disconnected', callback);[m
+[31m-  }[m
+[31m-[m
+[31m-  onConnectionChange(callback: (connected: boolean) => void): (() => void) | undefined {[m
+[31m-    if (!this.socket) return undefined;[m
+[31m-    [m
+[31m-    const handleConnect = () => callback(true);[m
+[31m-    const handleDisconnect = () => callback(false);[m
+[31m-    [m
+[31m-    // Set up listeners[m
+[31m-    this.socket.on('connect', handleConnect);[m
+[31m-    this.socket.on('disconnect', handleDisconnect);[m
+[31m-    [m
+[31m-    // Return cleanup function[m
+[31m-    return () => {[m
+[31m-      this.socket?.off('connect', handleConnect);[m
+[31m-      this.socket?.off('disconnect', handleDisconnect);[m
+[31m-    };[m
+[31m-  }[m
+[31m-[m
+[31m-  requestStateSync(gameId: string) {[m
+[31m-    if (!this.socket || !this.socket.connected) {[m
+[31m-      console.warn('Cannot request state sync: socket not connected');[m
+[31m-      return;[m
+[31m-    }[m
+[31m-    console.log('🔄 Requesting state sync for game:', gameId);[m
+[31m-    this.socket.emit('request-state-sync', { gameId });[m
+[31m-  }[m
+[31m-[m
+[31m-  off(event: string) {[m
+[31m-    this.socket?.off(event);[m
+[31m-  }[m
+[31m-[m
+[31m-  disconnect() {[m
+[31m-    if (this.socket) {[m
+[31m-      this.socket.disconnect();[m
+[31m-      this.socket = null;[m
+[31m-      this.gameId = null;[m
+[31m-      console.log('Disconnected from server');[m
+[31m-    }[m
+[31m-  }[m
+[31m-}[m
+[31m-[m
+[31m-export const socketService = new SocketService();[m
+[31m-[m
+[31m-[m

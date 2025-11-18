@@ -1,0 +1,34 @@
+{
+  "name": "gemini-ludo-ai-game",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "npx vite build",
+    "preview": "vite preview",
+    "build:all": "npm run build && cd server && npm install",
+    "start": "cd server && npm start",
+    "start:server": "cd server && npm start",
+    "railway:build": "npm install && npm run build && cd server && npm install",
+    "railway:start": "cd server && npm start",
+    "render:build": "npm install && npm run build && cd server && npm install",
+    "render:start": "cd server && npm start"
+  },
+  "dependencies": {
+    "@google/genai": "^1.29.1",
+    "@vitejs/plugin-react": "^5.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "socket.io-client": "^4.8.1",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0"
+  }
+}
