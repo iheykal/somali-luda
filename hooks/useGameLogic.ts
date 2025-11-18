@@ -1028,11 +1028,23 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
         }
 
         return () => {
+            const latestState = stateRef.current;
+            const currentPlayer = latestState.players[latestState.currentPlayerIndex];
+            const isStillPlayerTurn = currentPlayer && (isMultiplayer
+                ? currentPlayer.color === multiplayerConfig?.localPlayerColor
+                : !currentPlayer.isAI);
+            const shouldClear = latestState.turnState !== 'MOVING' || 
+                              !latestState.gameStarted ||
+                              latestState.legalMoves.length === 0 ||
+                              !isStillPlayerTurn;
             if (moveTimeoutRef.current) {
                 clearTimeout(moveTimeoutRef.current);
                 moveTimeoutRef.current = null;
             }
-            setMoveCountdown(null); // Clear countdown when effect cleans up
+            if (shouldClear) {
+                console.log('⏰ Clearing moveCountdown in cleanup');
+                setMoveCountdown(null);
+            }
         };
     }, [state.turnState, state.legalMoves, state.currentPlayerIndex, state.gameStarted, isMultiplayer, multiplayerConfig?.localPlayerColor]);
 
