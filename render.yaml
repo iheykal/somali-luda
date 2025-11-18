@@ -4,11 +4,12 @@ services:
     env: node
     region: frankfurt
     plan: free
-    branch: main
+    branch: master
     buildCommand: npm run render:build
     startCommand: npm run render:start
     rootDir: .
     envVars:
+      # Backend Environment Variables
       - key: NODE_ENV
         value: production
       - key: PORT
@@ -21,5 +22,13 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      # Frontend Environment Variables (VITE_* prefix required)
+      # These are injected at BUILD TIME by Vite
+      - key: VITE_API_URL
+        value: /api
+      - key: VITE_SOCKET_URL
+        sync: false  # Set this in Render dashboard to your deployment URL
+      - key: VITE_USE_REAL_API
+        value: true
 
 

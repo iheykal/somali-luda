@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deployment Diagnostics</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1, h2 {
+            color: #00ff00;
+            border-bottom: 2px solid #00ff00;
+            padding-bottom: 10px;
+        }
+        .section {
+            background: #2a2a2a;
+            border: 1px solid #00ff00;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .success {
+            color: #00ff00;
+        }
+        .error {
+            color: #ff0000;
+        }
+        .warning {
+            color: #ffaa00;
+        }
+        .info {
+            color: #00aaff;
+        }
+        button {
+            background: #00ff00;
+            color: #1a1a1a;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #00dd00;
+        }
+        button:disabled {
+            background: #555;
+            color: #999;
+            cursor: not-allowed;
+        }
+        pre {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-ok { background: #00ff00; }
+        .status-error { background: #ff0000; }
+        .status-warning { background: #ffaa00; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Ludo Game - Deployment Diagnostics</h1>
+    
+    <div class="section">
+        <h2>Quick Test</h2>
+        <button onclick="runAllTests()">Run All Diagnostics</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <div id="results">
+        <!-- Results will be inserted here -->
+    </div>
+
+    <script>
+        const resultsDiv = document.getElementById('results');
+
+        function log(message, type = 'info') {
+            const colors = {
+                success: '#00ff00',
+                error: '#ff0000',
+                warning: '#ffaa00',
+                info: '#00aaff'
+            };
+            const statusClass = type === 'success' ? 'status-ok' : 
+                               type === 'error' ? 'status-error' : 
+                               type === 'warning' ? 'status-warning' : '';
+            
+            const div = document.createElement('div');
+            div.innerHTML = `<span class="status-indicator ${statusClass}"></span><span class="${type}">${message}</span>`;
+            div.style.margin = '5px 0';
+            resultsDiv.appendChild(div);
+        }
+
+        function addSection(title) {
+            const section = document.createElement('div');
+            section.className = 'section';
+            section.innerHTML = `<h2>${title}</h2>`;
+            resultsDiv.appendChild(section);
+            return section;
+        }
+
+        function clearResults() {
+            resultsDiv.innerHTML = '';
+        }
+
+        async function runAllTests() {
+            clearResults();
+            log('🚀 Starting diagnostics...', 'info');
+            
+            await testEnvironmentVariables();
+            await testLocationInfo();
+            await testAPIConnectivity();
+            await testSocketConnectivity();
+            await testBackendHealth();
+            
+            log('✅ Diagnostics complete!', 'success');
+        }
+
+        function testEnvironmentVariables() {
+            const section = addSection('1. Environment Variables');
+            
+            // Try to detect Vite env vars (may not work in built version)
+            const checks = [
+                { name: 'Current Origin', value: window.location.origin },
+                { name: 'Hostname', value: window.location.hostname },
+                { name: 'Protocol', value: window.location.protocol },
+                { name: 'Port', value: window.location.port || '(default)' },
+                { name: 'Is Localhost', value: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' }
+            ];
+
+            checks.forEach(check => {
+                const pre = document.createElement('pre');
+                pre.textContent = `${check.name}: ${check.value}`;
+                section.appendChild(pre);
+            });
+        }
+
+        async function testLocationInfo() {
+            const section = addSection('2. Location & Environment');
+            
+            const info = {
+                'User Agent': navigator.userAgent,
+                'Language': navigator.language,
+                'Online': navigator.onLine,
+                'Cookies Enabled': navigator.cookieEnabled,
+                'LocalStorage Available': typeof(Storage) !== 'undefined'
+            };
+
+            for (const [key, value] of Object.entries(info)) {
+                const pre = document.createElement('pre');
+                pre.textContent = `${key}: ${value}`;
+                section.appendChild(pre);
+            }
+        }
+
+        async function testAPIConnectivity() {
+            const section = addSection('3. API Connectivity Tests');
+            
+            const apiUrls = [
+                { name: 'Relative URL', url: '/api/auth/me' },
+                { name: 'Same Origin', url: `${window.location.origin}/api/auth/me` }
+            ];
+
+            for (const test of apiUrls) {
+                const pre = document.createElement('pre');
+                pre.innerHTML = `Testing ${test.name}: ${test.url}\n`;
+                section.appendChild(pre);
+                
+                try {
+                    const startTime = Date.now();
+                    const response = await fetch(test.url, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('token') || 'no-token'}`
+                        }
+                    });
+                    const duration = Date.now() - startTime;
+                    
+                    const data = await response.json().catch(() => ({}));
+                    
+                    pre.innerHTML += `Status: ${response.status} ${response.statusText}\n`;
+                    pre.innerHTML += `Duration: ${duration}ms\n`;
+                    pre.innerHTML += `Response: ${JSON.stringify(data, null, 2)}\n`;
+                    
+                    if (response.ok || response.status === 401) {
+                        pre.innerHTML += `<span class="success">✅ API is reachable</span>\n`;
+                    } else {
+                        pre.innerHTML += `<span class="error">❌ API returned error</span>\n`;
+                    }
+                } catch (error) {
+                    pre.innerHTML += `<span class="error">❌ Error: ${error.message}</span>\n`;
+                }
+            }
+        }
+
+        async function testSocketConnectivity() {
+            const section = addSection('4. Socket.io Connectivity');
+            
+            const pre = document.createElement('pre');
+            section.appendChild(pre);
+            
+            pre.textContent = 'Testing Socket.io connection...\n';
+            
+            try {
+                // Check if socket.io client is available
+                if (typeof io === 'undefined') {
+                    pre.textContent += '⚠️  Socket.io client not loaded. Trying to detect from window object...\n';
+                    
+                    // Try alternative methods
+                    const socketUrl = window.location.origin;
+                    pre.textContent += `Would connect to: ${socketUrl}\n`;
+                    pre.textContent += `Note: Socket.io client script not available in this diagnostic page.\n`;
+                    pre.textContent += `Check browser console in the actual app for socket connection logs.\n`;
+                } else {
+                    const socket = io(window.location.origin, {
+                        transports: ['websocket'],
+                        reconnection: false
+                    });
+                    
+                    const timeout = setTimeout(() => {
+                        socket.disconnect();
+                        pre.textContent += '❌ Connection timeout (10 seconds)\n';
+                    }, 10000);
+                    
+                    socket.on('connect', () => {
+                        clearTimeout(timeout);
+                        pre.textContent += `✅ Connected! Socket ID: ${socket.id}\n`;
+                        socket.disconnect();
+                    });
+                    
+                    socket.on('connect_error', (error) => {
+                        clearTimeout(timeout);
+                        pre.textContent += `❌ Connection error: ${error.message}\n`;
+                    });
+                }
+            } catch (error) {
+                pre.textContent += `❌ Error: ${error.message}\n`;
+            }
+        }
+
+        async function testBackendHealth() {
+            const section = addSection('5. Backend Health Check');
+            
+            const pre = document.createElement('pre');
+            section.appendChild(pre);
+            
+            pre.textContent = 'Checking backend endpoints...\n\n';
+            
+            const endpoints = [
+                { path: '/', name: 'Root (Frontend)' },
+                { path: '/api', name: 'API Root' },
+                { path: '/api/auth/me', name: 'Auth Endpoint' }
+            ];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const startTime = Date.now();
+                    const response = await fetch(endpoint.path, {
+                        method: 'HEAD',
+                        cache: 'no-cache'
+                    }).catch(() => null);
+                    const duration = Date.now() - startTime;
+                    
+                    if (response) {
+                        pre.textContent += `${endpoint.name}: `;
+                        pre.textContent += `${response.status} (${duration}ms)\n`;
+                    } else {
+                        pre.textContent += `${endpoint.name}: ❌ Unreachable\n`;
+                    }
+                } catch (error) {
+                    pre.textContent += `${endpoint.name}: ❌ ${error.message}\n`;
+                }
+            }
+        }
+
+        // Auto-run on load
+        window.addEventListener('load', () => {
+            log('Diagnostic tool loaded. Click "Run All Diagnostics" to start.', 'info');
+        });
+    </script>
+</body>
+</html>
+
