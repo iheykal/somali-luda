@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: gemini-ludo-game
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && npm run build && cd server && npm install
+    startCommand: cd server && npm start
+    rootDir: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        generateValue: true
+      - key: CONNECTION_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+

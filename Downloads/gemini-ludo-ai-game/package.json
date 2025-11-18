@@ -15,7 +15,9 @@
     "start": "cd server && npm start",
     "start:server": "cd server && npm start",
     "railway:build": "npm install && npm run build && cd server && npm install",
-    "railway:start": "cd server && npm start"
+    "railway:start": "cd server && npm start",
+    "render:build": "npm install && npm run build && cd server && npm install",
+    "render:start": "cd server && npm start"
   },
   "dependencies": {
     "@google/genai": "^1.29.1",
