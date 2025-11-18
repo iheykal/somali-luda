@@ -54,14 +54,22 @@ export default defineConfig(({ mode }) => {
     // Merge: process env (production) takes highest precedence, then server env (local dev), then root env
     const mergedEnv = { ...rootEnv, ...serverEnv, ...processEnv };
     
-    // Log environment variable sources for debugging (only in build mode)
+    // Define constants with production defaults as fallback
+    // This ensures that even if Render doesn't pass env vars during build, we use correct production values
+    const VITE_API_URL = mergedEnv.VITE_API_URL || mergedEnv.API_URL || (mode === 'production' ? '/api' : undefined);
+    const VITE_SOCKET_URL = mergedEnv.VITE_SOCKET_URL || mergedEnv.SOCKET_URL || (mode === 'production' ? 'https://ludo-252.onrender.com' : undefined);
+    const VITE_USE_REAL_API = mergedEnv.VITE_USE_REAL_API || mergedEnv.USE_REAL_API || (mode === 'production' ? 'true' : 'false');
+    const GEMINI_API_KEY = mergedEnv.GEMINI_API_KEY;
+    
+    // Log environment variable sources for debugging
     if (mode === 'production') {
         console.log('🔧 Vite Build Environment Variables:');
-        console.log('   Process Env:', Object.keys(processEnv).length > 0 ? processEnv : 'none');
+        console.log('   Mode:', mode);
+        console.log('   VITE_API_URL:', VITE_API_URL);
+        console.log('   VITE_SOCKET_URL:', VITE_SOCKET_URL);
+        console.log('   VITE_USE_REAL_API:', VITE_USE_REAL_API);
+        console.log('   Process Env Keys:', Object.keys(processEnv).length > 0 ? Object.keys(processEnv) : 'none');
         console.log('   Server Env:', Object.keys(serverEnv).length > 0 ? 'loaded from server/.env' : 'not found');
-        console.log('   Merged VITE_API_URL:', mergedEnv.VITE_API_URL || mergedEnv.API_URL || 'not set');
-        console.log('   Merged VITE_SOCKET_URL:', mergedEnv.VITE_SOCKET_URL || mergedEnv.SOCKET_URL || 'not set');
-        console.log('   Merged VITE_USE_REAL_API:', mergedEnv.VITE_USE_REAL_API || mergedEnv.USE_REAL_API || 'false');
     }
     
     return {
@@ -78,14 +86,14 @@ export default defineConfig(({ mode }) => {
       // Configure public directory
       publicDir: 'public',
       define: {
-        'process.env.API_KEY': JSON.stringify(mergedEnv.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(mergedEnv.GEMINI_API_KEY),
-        // Expose environment variables to the app
-        // Support both VITE_ prefixed and non-prefixed vars from server/.env
-        'import.meta.env.VITE_API_URL': JSON.stringify(mergedEnv.VITE_API_URL || mergedEnv.API_URL),
+        'process.env.API_KEY': JSON.stringify(GEMINI_API_KEY),
+        'process.env.GEMINI_API_KEY': JSON.stringify(GEMINI_API_KEY),
+        // Expose environment variables to the app with production defaults
+        // These constants are defined above with fallbacks to production values
+        'import.meta.env.VITE_API_URL': JSON.stringify(VITE_API_URL),
         'import.meta.env.VITE_BACKEND_URL': JSON.stringify(mergedEnv.VITE_BACKEND_URL || mergedEnv.BACKEND_URL),
-        'import.meta.env.VITE_SOCKET_URL': JSON.stringify(mergedEnv.VITE_SOCKET_URL || mergedEnv.SOCKET_URL),
-        'import.meta.env.VITE_USE_REAL_API': JSON.stringify(mergedEnv.VITE_USE_REAL_API || mergedEnv.USE_REAL_API || 'false'),
+        'import.meta.env.VITE_SOCKET_URL': JSON.stringify(VITE_SOCKET_URL),
+        'import.meta.env.VITE_USE_REAL_API': JSON.stringify(VITE_USE_REAL_API),
       },
       resolve: {
         alias: {
