@@ -10,14 +10,19 @@ class SocketService {
     if (envUrl && envUrl.trim() !== '' && envUrl !== 'http://localhost:3001') {
       return envUrl.trim();
     }
-    
-    // If we're in the browser, detect the hostname dynamically
+
+    // Use Railway backend for WebSocket multiplayer (hybrid deployment)
     if (typeof window !== 'undefined') {
       const hostname = window.location.hostname;
-      const protocol = window.location.protocol; // 'http:' or 'https:'
       const isProduction = hostname !== 'localhost' && hostname !== '127.0.0.1';
-      
-      // In production (deployed), use same origin if backend is on same domain
+
+      if (isProduction) {
+        // Use Railway backend URL for production multiplayer
+        return 'https://your-railway-backend-url'; // Replace with actual Railway URL
+      }
+    }
+
+    // Development fallback
       // This works when frontend and backend are deployed together
       if (isProduction) {
         // Use same origin - works when frontend and backend are on same domain
@@ -215,4 +220,5 @@ class SocketService {
 }
 
 export const socketService = new SocketService();
+
 
