@@ -5,14 +5,30 @@ class SocketService {
   private gameId: string | null = null;
 
   private getDefaultSocketUrl(): string {
-    // If we're on localhost, try to detect if we should use local network IP
+    // First, check if environment variable is explicitly set (highest priority)
+    const envUrl = import.meta.env.VITE_SOCKET_URL;
+    if (envUrl && envUrl.trim() !== '' && envUrl !== 'http://localhost:3001') {
+      return envUrl.trim();
+    }
+    
+    // If we're in the browser, detect the hostname dynamically
     if (typeof window !== 'undefined') {
       const hostname = window.location.hostname;
-      // If accessing from IP address (not localhost), use that IP for socket
-      if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-        return `http://${hostname}:3001`;
+      const protocol = window.location.protocol; // 'http:' or 'https:'
+      const isProduction = hostname !== 'localhost' && hostname !== '127.0.0.1';
+      
+      // In production (deployed), don't assume port 3001 - backend should be on same domain or env var should be set
+      if (isProduction) {
+        // If no env var is set, try to use same origin
+        // This assumes backend is proxied or on same domain
+        return `${protocol}//${hostname}`;
       }
+      
+      // Development: use localhost with port 3001
+      return 'http://localhost:3001';
     }
+    
+    // Default fallback for development
     return 'http://localhost:3001';
   }
 

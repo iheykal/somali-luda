@@ -4,24 +4,38 @@
 
 // Helper function to get the API URL, automatically detecting hostname for mobile devices
 function getApiUrl(): string {
-  // First, check if environment variable is explicitly set
+  // First, check if environment variable is explicitly set (highest priority)
   const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL;
-  if (envUrl && envUrl !== 'http://localhost:3001/api' && !envUrl.startsWith('/')) {
-    return envUrl;
+  if (envUrl && envUrl.trim() !== '' && envUrl !== 'http://localhost:3001/api') {
+    // Ensure it ends with /api if it doesn't already
+    const cleanUrl = envUrl.trim();
+    if (cleanUrl.endsWith('/api')) {
+      return cleanUrl;
+    } else if (!cleanUrl.endsWith('/api/')) {
+      return `${cleanUrl}/api`;
+    }
+    return cleanUrl;
   }
   
   // If we're in the browser, detect the hostname dynamically
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    const port = '3001';
+    const protocol = window.location.protocol; // 'http:' or 'https:'
+    const isProduction = hostname !== 'localhost' && hostname !== '127.0.0.1';
     
-    // If accessing from IP address (not localhost), use that IP for API
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      return `http://${hostname}:${port}/api`;
+    // In production (deployed), don't assume port 3001 - backend should be on same domain or env var should be set
+    // For production, we should use relative URLs or the backend should be on the same domain
+    if (isProduction) {
+      // If no env var is set, try to use same origin with /api
+      // This assumes backend is proxied or on same domain
+      return `${protocol}//${hostname}/api`;
     }
+    
+    // Development: use localhost with port 3001
+    return 'http://localhost:3001/api';
   }
   
-  // Default fallback
+  // Default fallback for development
   return 'http://localhost:3001/api';
 }
 
@@ -82,7 +96,8 @@ export const authAPI = {
             return await response.json();
         } catch (error) {
             console.error('Registration error:', error);
-            return { error: 'Network error. Please check your connection and ensure the server is running on port 3001.' };
+            const apiUrl = API_URL;
+            return { error: `Network error. Unable to connect to backend server at ${apiUrl}. Please ensure the backend is deployed and VITE_API_URL is configured correctly.` };
         }
     },
     
@@ -113,7 +128,8 @@ export const authAPI = {
             return data;
         } catch (error) {
             console.error('API: Login error:', error);
-            return { error: 'Network error. Please check your connection and ensure the server is running on port 3001.' };
+            const apiUrl = API_URL;
+            return { error: `Network error. Unable to connect to backend server at ${apiUrl}. Please ensure the backend is deployed and VITE_API_URL is configured correctly.` };
         }
     },
     
