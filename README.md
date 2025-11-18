@@ -6,6 +6,8 @@
 
 A multiplayer Ludo game powered by Google Gemini AI, featuring online multiplayer support via WebSocket.
 
+> **Deployed on Render** - Timer countdown fixes and deployment optimizations applied.
+
 View your app in AI Studio: https://ai.studio/apps/drive/1-0Ito37XvLvfZlJe1ptSuWPMH8KHU9IK
 
 ## Features
