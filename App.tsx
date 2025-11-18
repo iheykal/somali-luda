@@ -24,6 +24,7 @@ interface MultiplayerConfig {
 
 const AppContent: React.FC = () => {
   const [multiplayerConfig, setMultiplayerConfig] = useState<MultiplayerConfig | null>(null);
+  // Force fresh build - countdown timer fix
   const { state, startGame, handleRollDice, handleMoveToken, handleAnimationComplete, isMyTurn, setState, diceRollCountdown, moveCountdown } = useGameLogic(multiplayerConfig || undefined);
   const { gameStarted, players, currentPlayerIndex, turnState, winners } = state;
   const { isAuthenticated, loading: authLoading, isAdmin, isSuperAdmin } = useAuth();
