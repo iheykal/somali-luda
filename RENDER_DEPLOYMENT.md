@@ -10,14 +10,14 @@
 
    **Basic Settings:**
    - **Name**: `ludo-backend` (or any name you prefer)
-   - **Branch**: `master`
-   - **Root Directory**: `Downloads/gemini-ludo-ai-game/server`
+   - **Branch**: `main` (or `master` if that's your default branch)
+   - **Root Directory**: Leave empty (use repository root)
    - **Region**: Choose your preferred region
    - **Instance Type**: Free (or paid if needed)
 
    **Build & Deploy:**
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
+   - **Build Command**: `npm run render:build`
+   - **Start Command**: `npm run render:start`
 
    **Environment Variables:**
    Add these environment variables in Render:
@@ -113,6 +113,32 @@ After deployment:
 - Make sure `FRONTEND_URL` in backend matches your frontend URL exactly
 - Include protocol (https://) in FRONTEND_URL
 - Check backend logs for CORS rejection messages
+
+### Bad Gateway (502) Error:
+This usually means the server is running but not responding correctly. Fix by:
+
+1. **Update Render Service Settings:**
+   - Go to your Render service dashboard
+   - Click **Settings** → **Build & Deploy**
+   - **Root Directory**: Leave empty (should be blank, not `server` or `Downloads/gemini-ludo-ai-game/server`)
+   - **Build Command**: Change to `npm run render:build`
+   - **Start Command**: Change to `npm run render:start`
+   - Click **Save Changes** - this will trigger a new deployment
+
+2. **Verify Environment Variables:**
+   - Make sure `NODE_ENV=production` is set
+   - Ensure `PORT` is not manually set (Render sets this automatically)
+   - Verify `CONNECTION_URI` is correct
+
+3. **Check Build Logs:**
+   - Look for "✓ built in X.XXs" message (frontend build success)
+   - Verify "dist" folder is created during build
+   - Check for any build errors
+
+4. **Check Runtime Logs:**
+   - Server should show: "🚀 Ludo game server running on port XXXX"
+   - MongoDB should show: "✅ MongoDB connected successfully"
+   - Frontend path should show: "📦 Serving frontend from: /opt/render/project/src/dist"
 
 
 
