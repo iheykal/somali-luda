@@ -436,16 +436,28 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
 
         // Start countdown interval if either timer is active
         if (diceRollCountdown !== null || moveCountdown !== null) {
+            console.log('⏰ Starting countdown interval', { diceRollCountdown, moveCountdown });
             countdownIntervalRef.current = setInterval(() => {
                 setDiceRollCountdown((prev) => {
-                    if (prev === null || prev <= 1) return null;
+                    if (prev === null) return null;
+                    if (prev <= 1) {
+                        console.log('⏰ Dice roll countdown reached 0');
+                        return null;
+                    }
+                    console.log('⏰ Dice roll countdown:', prev - 1);
                     return prev - 1;
                 });
                 setMoveCountdown((prev) => {
-                    if (prev === null || prev <= 1) return null;
+                    if (prev === null) return null;
+                    if (prev <= 1) {
+                        console.log('⏰ Move countdown reached 0');
+                        return null;
+                    }
                     return prev - 1;
                 });
             }, 1000);
+        } else {
+            console.log('⏰ No active countdown timers');
         }
 
         return () => {
@@ -870,8 +882,15 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
             isPlayerTurn &&
             !botPlayingRef.current
         ) {
-            console.log('⏰ Starting 15s timeout for dice roll');
+            console.log('⏰ Starting 15s timeout for dice roll', {
+                gameStarted: state.gameStarted,
+                turnState: state.turnState,
+                currentPlayer: currentPlayer?.color,
+                isPlayerTurn,
+                botPlaying: botPlayingRef.current
+            });
             setDiceRollCountdown(15); // Start countdown at 15 seconds
+            console.log('⏰ Set diceRollCountdown to 15');
             
             diceRollTimeoutRef.current = setTimeout(() => {
                 setDiceRollCountdown(null); // Clear countdown when timeout expires
@@ -906,11 +925,31 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
         }
 
         return () => {
+            const latestState = stateRef.current;
+            console.log('⏰ Dice roll timer effect cleanup', {
+                turnState: latestState.turnState,
+                currentPlayerIndex: latestState.currentPlayerIndex,
+                hasTimeout: !!diceRollTimeoutRef.current
+            });
             if (diceRollTimeoutRef.current) {
                 clearTimeout(diceRollTimeoutRef.current);
                 diceRollTimeoutRef.current = null;
             }
-            setDiceRollCountdown(null); // Clear countdown when effect cleans up
+            // Only clear countdown if we're no longer in ROLLING state or it's not our turn
+            // This prevents clearing the countdown when the effect re-runs due to other state changes
+            const currentPlayer = latestState.players[latestState.currentPlayerIndex];
+            const isStillPlayerTurn = currentPlayer && (isMultiplayer 
+                ? currentPlayer.color === multiplayerConfig?.localPlayerColor
+                : !currentPlayer.isAI);
+            const shouldClear = latestState.turnState !== 'ROLLING' || 
+                              !latestState.gameStarted ||
+                              !isStillPlayerTurn;
+            if (shouldClear) {
+                console.log('⏰ Clearing diceRollCountdown in cleanup', { shouldClear, turnState: latestState.turnState, isStillPlayerTurn });
+                setDiceRollCountdown(null);
+            } else {
+                console.log('⏰ Keeping diceRollCountdown active', { turnState: latestState.turnState, isStillPlayerTurn });
+            }
         };
     }, [state.turnState, state.currentPlayerIndex, state.gameStarted, isMultiplayer, multiplayerConfig?.localPlayerColor]);
 
