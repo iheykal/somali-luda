@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Ludo AI Game",
+  "description": "A classic Ludo board game powered by a strategic AI opponent using Google's Gemini API. Play locally with friends or challenge the AI in this visually polished web-based game.",
+  "requestFramePermissions": []
+}

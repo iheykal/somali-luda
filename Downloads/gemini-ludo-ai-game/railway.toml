@@ -1,8 +1,8 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm install && npm run build && cd server && npm install"
 
 [deploy]
-startCommand = "cd server && npm start"
+startCommand = "npm run railway:start"
 healthcheckPath = "/healthz"
+healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
