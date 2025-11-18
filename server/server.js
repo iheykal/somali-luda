@@ -2404,83 +2404,88 @@ if (process.env.NODE_ENV === 'production') {
             path.resolve('dist')
         ];
         
+        let foundDist = false;
+        let foundDistPath = null;
+        
         for (const altPath of altPaths) {
             if (existsSync(altPath)) {
                 console.log(`✅ Found dist folder at alternative path: ${altPath}`);
-                // Use this path instead
-                const absoluteFrontendPath = path.resolve(altPath);
-                
-                app.use(express.static(absoluteFrontendPath, {
-                    index: false,
-                    maxAge: '1d',
-                    setHeaders: (res, filePath) => {
-                        if (filePath.endsWith('.css')) {
-                            res.setHeader('Content-Type', 'text/css; charset=utf-8');
-                        } else if (filePath.endsWith('.js')) {
-                            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-                        }
-                    },
-                    fallthrough: false
-                }));
-                
-                app.get('/', (req, res) => {
-                    const indexPath = path.join(absoluteFrontendPath, 'index.html');
-                    res.sendFile(indexPath);
-                });
-                
-                app.get('*', (req, res) => {
-                    if (req.path.startsWith('/api')) {
-                        return res.status(404).json({ error: 'API route not found' });
-                    }
-                    const indexPath = path.join(absoluteFrontendPath, 'index.html');
-                    res.sendFile(indexPath);
-                });
-                
-                return; // Exit early if we found the dist folder
+                foundDist = true;
+                foundDistPath = path.resolve(altPath);
+                break;
             }
         }
         
-        // If we get here, dist folder really doesn't exist
-        console.error('❌ Dist folder not found in any expected location!');
-        
-        // Provide a helpful error page in production if dist doesn't exist
-        app.get('/', (req, res) => {
-            res.status(503).send(`
-                <html>
-                    <head><title>Frontend Not Built</title></head>
-                    <body style="font-family: Arial; padding: 40px; text-align: center;">
-                        <h1>Frontend Not Built</h1>
-                        <p>The frontend has not been built yet. Please check the build logs.</p>
-                        <p>Expected dist folder at: ${absoluteFrontendPath}</p>
-                        <p>Checked paths:</p>
-                        <ul style="text-align: left; display: inline-block;">
-                            ${altPaths.map(p => `<li>${p}</li>`).join('')}
-                        </ul>
-                    </body>
-                </html>
-            `);
-        });
-        
-        app.get('*', (req, res) => {
-            if (req.path.startsWith('/api')) {
-                console.warn(`⚠️  API route not found: ${req.method} ${req.path}`);
-                return res.status(404).json({ 
-                    error: 'API route not found',
-                    path: req.path,
-                    method: req.method
-                });
-            }
-            res.status(503).send(`
-                <html>
-                    <head><title>Frontend Not Built</title></head>
-                    <body style="font-family: Arial; padding: 40px; text-align: center;">
-                        <h1>Frontend Not Built</h1>
-                        <p>The frontend has not been built yet. Please check the build logs.</p>
-                        <p>Expected dist folder at: ${absoluteFrontendPath}</p>
-                    </body>
-                </html>
-            `);
-        });
+        if (foundDist && foundDistPath) {
+            // Use the found path
+            app.use(express.static(foundDistPath, {
+                index: false,
+                maxAge: '1d',
+                setHeaders: (res, filePath) => {
+                    if (filePath.endsWith('.css')) {
+                        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+                    } else if (filePath.endsWith('.js')) {
+                        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+                    }
+                },
+                fallthrough: false
+            }));
+            
+            app.get('/', (req, res) => {
+                const indexPath = path.join(foundDistPath, 'index.html');
+                res.sendFile(indexPath);
+            });
+            
+            app.get('*', (req, res) => {
+                if (req.path.startsWith('/api')) {
+                    return res.status(404).json({ error: 'API route not found' });
+                }
+                const indexPath = path.join(foundDistPath, 'index.html');
+                res.sendFile(indexPath);
+            });
+        } else {
+            // If we get here, dist folder really doesn't exist
+            console.error('❌ Dist folder not found in any expected location!');
+            
+            // Provide a helpful error page in production if dist doesn't exist
+            app.get('/', (req, res) => {
+                res.status(503).send(`
+                    <html>
+                        <head><title>Frontend Not Built</title></head>
+                        <body style="font-family: Arial; padding: 40px; text-align: center;">
+                            <h1>Frontend Not Built</h1>
+                            <p>The frontend has not been built yet. Please check the build logs.</p>
+                            <p>Expected dist folder at: ${absoluteFrontendPath}</p>
+                            <p>Checked paths:</p>
+                            <ul style="text-align: left; display: inline-block;">
+                                ${altPaths.map(p => `<li>${p}</li>`).join('')}
+                            </ul>
+                        </body>
+                    </html>
+                `);
+            });
+            
+            app.get('*', (req, res) => {
+                if (req.path.startsWith('/api')) {
+                    console.warn(`⚠️  API route not found: ${req.method} ${req.path}`);
+                    return res.status(404).json({ 
+                        error: 'API route not found',
+                        path: req.path,
+                        method: req.method
+                    });
+                }
+                res.status(503).send(`
+                    <html>
+                        <head><title>Frontend Not Built</title></head>
+                        <body style="font-family: Arial; padding: 40px; text-align: center;">
+                            <h1>Frontend Not Built</h1>
+                            <p>The frontend has not been built yet. Please check the build logs.</p>
+                            <p>Expected dist folder at: ${absoluteFrontendPath}</p>
+                        </body>
+                    </html>
+                `);
+            });
+        }
     }
 } else {
     // In development, frontend is served by Vite dev server
