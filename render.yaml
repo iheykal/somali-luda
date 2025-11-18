@@ -4,8 +4,8 @@ services:
     env: node
     region: frankfurt
     plan: free
-    buildCommand: npm install && npm run build && cd server && npm install
-    startCommand: cd server && npm start
+    buildCommand: npm run render:build
+    startCommand: npm run render:start
     rootDir: .
     envVars:
       - key: NODE_ENV
