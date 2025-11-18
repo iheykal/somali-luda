@@ -2290,8 +2290,9 @@ if (process.env.NODE_ENV === 'production') {
                     res.setHeader('Content-Type', 'image/svg+xml');
                 }
             },
-            // Don't fallthrough - return 404 for missing static files
-            fallthrough: false
+            // Allow fallthrough so route handlers can process non-file requests
+            // Static files that exist will be served, missing files will pass through
+            fallthrough: true
         }));
         
         // Add middleware to log static file requests (after static middleware)
