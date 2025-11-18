@@ -370,7 +370,6 @@ const GameSetup: React.FC<GameSetupProps> = ({ onStartGame, onEnterAdmin, onEnte
             )}
           </div>
         )}
-        <p className="text-slate-300 mb-8 text-lg">Choose how you want to play.</p>
         <div className="space-y-4">
           <button
             onClick={handleStartMultiplayer}
