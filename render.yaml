@@ -5,8 +5,8 @@ services:
     region: frankfurt
     plan: free
     branch: master
-    buildCommand: npm run render:build
-    startCommand: npm run render:start
+    buildCommand: npm install && npm run build && cd server && npm install
+    startCommand: cd server && npm start
     rootDir: .
     envVars:
       # Backend Environment Variables
