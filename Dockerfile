@@ -10,15 +10,36 @@ COPY package.json package-lock.json ./
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci
 
-# Copy source code
-COPY . .
+# Copy all necessary files for the build
+COPY index.html ./
+COPY index.tsx ./
+COPY App.tsx ./
+COPY tsconfig.json ./
+COPY vite.config.ts ./
+COPY constants.ts ./
+COPY types.ts ./
+
+# Copy directories
+COPY components ./components
+COPY services ./services
+COPY lib ./lib
+COPY hooks ./hooks
+COPY context ./context
+COPY data ./data
+COPY public ./public
+COPY api ./api
+
+# List services directory to verify it's copied
+RUN echo "Checking services directory..." && ls -la services/
 
 # Build the frontend
 RUN npm run build
 
+# Copy server files
+COPY server ./server
+
 # Install server dependencies
 WORKDIR /app/server
-COPY package.json package-lock.json ./
 RUN npm ci --only=production
 WORKDIR /app
 
