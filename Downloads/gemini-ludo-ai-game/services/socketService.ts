@@ -17,11 +17,12 @@ class SocketService {
       const protocol = window.location.protocol; // 'http:' or 'https:'
       const isProduction = hostname !== 'localhost' && hostname !== '127.0.0.1';
       
-      // In production (deployed), don't assume port 3001 - backend should be on same domain or env var should be set
+      // In production (deployed), use same origin if backend is on same domain
+      // This works when frontend and backend are deployed together
       if (isProduction) {
-        // If no env var is set, try to use same origin
-        // This assumes backend is proxied or on same domain
-        return `${protocol}//${hostname}`;
+        // Use same origin - works when frontend and backend are on same domain
+        // Socket.io will automatically use the current window location
+        return window.location.origin;
       }
       
       // Development: use localhost with port 3001

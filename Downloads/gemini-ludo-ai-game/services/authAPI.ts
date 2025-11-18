@@ -23,12 +23,11 @@ function getApiUrl(): string {
     const protocol = window.location.protocol; // 'http:' or 'https:'
     const isProduction = hostname !== 'localhost' && hostname !== '127.0.0.1';
     
-    // In production (deployed), don't assume port 3001 - backend should be on same domain or env var should be set
-    // For production, we should use relative URLs or the backend should be on the same domain
+    // In production (deployed), use relative URL if backend is on same domain
+    // This works when frontend and backend are deployed together
     if (isProduction) {
-      // If no env var is set, try to use same origin with /api
-      // This assumes backend is proxied or on same domain
-      return `${protocol}//${hostname}/api`;
+      // Use relative URL - works when frontend and backend are on same domain
+      return '/api';
     }
     
     // Development: use localhost with port 3001

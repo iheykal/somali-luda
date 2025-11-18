@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:all": "npm run build && cd server && npm install",
+    "start": "cd server && npm start",
+    "start:server": "cd server && npm start"
   },
   "dependencies": {
     "@google/genai": "^1.29.1",

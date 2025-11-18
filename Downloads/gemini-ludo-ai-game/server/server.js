@@ -6,10 +6,17 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 import User from './models/User.js';
 import Transaction from './models/Transaction.js';
 import MatchRevenue from './models/MatchRevenue.js';
 import AuditLog from './models/AuditLog.js';
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables from .env file
 dotenv.config();
@@ -19,17 +26,30 @@ const app = express();
 // Security: Improved CORS configuration
 const corsOptions = {
     origin: (origin, callback) => {
-        // In production, only allow specific origins
+        // If no origin (same-origin request), allow it
+        // This happens when frontend and backend are on the same domain
+        if (!origin) {
+            return callback(null, true);
+        }
+        
+        // In production, allow specific origins or same-origin
         if (process.env.NODE_ENV === 'production') {
             const allowedOrigins = process.env.FRONTEND_URL?.split(',') || [];
-            if (!origin || allowedOrigins.includes(origin)) {
+            // Allow same-origin requests (when frontend and backend are together)
+            // Also allow explicitly configured origins
+            if (allowedOrigins.includes(origin)) {
                 callback(null, true);
             } else {
-                callback(new Error('Not allowed by CORS'));
+                // If FRONTEND_URL is not set, allow all (for same-origin deployment)
+                // Otherwise, reject
+                if (allowedOrigins.length === 0) {
+                    callback(null, true);
+                } else {
+                    callback(new Error('Not allowed by CORS'));
+                }
             }
         } else {
             // Development: Allow localhost and local network
-            if (!origin) return callback(null, true);
             const allowedPatterns = [
                 /^http:\/\/localhost:\d+$/,
                 /^http:\/\/127\.0\.0\.1:\d+$/,
@@ -1785,6 +1805,38 @@ mongoose.connection.on('disconnected', () => {
 mongoose.connection.on('error', (err) => {
   console.error('❌ MongoDB error:', err);
 });
+
+// ===== SERVE FRONTEND STATIC FILES (Production) =====
+// Serve static files from the React app build directory
+if (process.env.NODE_ENV === 'production') {
+    // Path to the built frontend (dist folder in root, one level up from server)
+    const frontendPath = path.join(__dirname, '..', 'dist');
+    
+    // Check if dist folder exists
+    if (existsSync(frontendPath)) {
+        console.log('📦 Serving frontend from:', frontendPath);
+        
+        // Serve static files (CSS, JS, images, etc.)
+        app.use(express.static(frontendPath));
+        
+        // Handle React routing - return index.html for all non-API routes
+        // This must be after all API routes
+        app.get('*', (req, res) => {
+            // Don't serve index.html for API routes
+            if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+                return res.status(404).json({ error: 'Route not found' });
+            }
+            // Serve index.html for all other routes (React Router)
+            res.sendFile(path.join(frontendPath, 'index.html'));
+        });
+    } else {
+        console.warn('⚠️  Frontend dist folder not found. Make sure to build the frontend first.');
+        console.warn('   Expected path:', frontendPath);
+    }
+} else {
+    // In development, frontend is served by Vite dev server
+    console.log('🔧 Development mode: Frontend served by Vite dev server');
+}
 
 const PORT = process.env.PORT || 3001;
 // Bind to 0.0.0.0 to allow connections from other devices on the network
