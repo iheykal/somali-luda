@@ -2476,14 +2476,71 @@ if (process.env.NODE_ENV === 'production') {
     console.log('🔧 Development mode: Frontend served by Vite dev server');
 }
 
-const PORT = process.env.PORT || 3001;
-// Bind to 0.0.0.0 to allow connections from other devices on the network
-httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Ludo game server running on port ${PORT}`);
-  console.log(`📡 Accessible from:`);
-  console.log(`   - Local: http://localhost:${PORT}`);
-  console.log(`   - Network: http://192.168.100.32:${PORT}`);
-  console.log(`   - Frontend URL: ${process.env.FRONTEND_URL || "http://localhost:3000"}`);
-  console.log(`   - MongoDB: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Not connected'}`);
+// ===== GLOBAL ERROR HANDLERS =====
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  // Exit gracefully after logging
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
 });
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+  // Log but don't exit - many unhandled rejections are non-fatal
+  // Only exit if it's a critical error
+  if (reason && reason.code === 'ECONNREFUSED') {
+    console.error('❌ Critical connection error, exiting...');
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
+  }
+});
+
+const PORT = process.env.PORT || 3001;
+
+// Handle server errors
+httpServer.on('error', (error) => {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+  
+  const bind = typeof PORT === 'string' ? 'Pipe ' + PORT : 'Port ' + PORT;
+  
+  switch (error.code) {
+    case 'EACCES':
+      console.error(`❌ ${bind} requires elevated privileges`);
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(`❌ ${bind} is already in use`);
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+});
+
+// Start the server
+try {
+  // Bind to 0.0.0.0 to allow connections from other devices on the network
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Ludo game server running on port ${PORT}`);
+    console.log(`📡 Accessible from:`);
+    console.log(`   - Local: http://localhost:${PORT}`);
+    console.log(`   - Network: http://192.168.100.32:${PORT}`);
+    console.log(`   - Frontend URL: ${process.env.FRONTEND_URL || "http://localhost:3000"}`);
+    console.log(`   - MongoDB: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Not connected'}`);
+    console.log(`   - Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`✅ Server started successfully!`);
+  });
+} catch (error) {
+  console.error('❌ Failed to start server:', error);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+}
 
