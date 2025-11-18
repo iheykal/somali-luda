@@ -8,7 +8,7 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import User from './models/User.js';
 import Transaction from './models/Transaction.js';
 import MatchRevenue from './models/MatchRevenue.js';
@@ -2248,7 +2248,25 @@ if (process.env.NODE_ENV === 'production') {
         
         // Serve static files (CSS, JS, images, etc.) with proper MIME types
         // This MUST be before the catch-all route
-        app.use(express.static(frontendPath, {
+        // Use absolute path resolution to ensure it works on Render
+        const absoluteFrontendPath = path.resolve(frontendPath);
+        console.log('📦 Absolute frontend path:', absoluteFrontendPath);
+        console.log('📦 Dist folder exists:', existsSync(absoluteFrontendPath));
+        
+        if (existsSync(absoluteFrontendPath)) {
+            // List files in dist/assets to verify build
+            try {
+                const assetsPath = path.join(absoluteFrontendPath, 'assets');
+                if (existsSync(assetsPath)) {
+                    const assets = readdirSync(assetsPath);
+                    console.log('📦 Assets found:', assets.slice(0, 5), '...');
+                }
+            } catch (e) {
+                console.warn('⚠️  Could not list assets:', e.message);
+            }
+        }
+        
+        app.use(express.static(absoluteFrontendPath, {
             // Don't serve index.html for static file requests
             index: false,
             // Set proper cache headers
@@ -2272,9 +2290,22 @@ if (process.env.NODE_ENV === 'production') {
                     res.setHeader('Content-Type', 'image/svg+xml');
                 }
             },
-            // Fallthrough: if file not found, continue to next middleware
-            fallthrough: true
+            // Don't fallthrough - return 404 if file not found
+            fallthrough: false
         }));
+        
+        // Add logging middleware for static file requests (production)
+        app.use((req, res, next) => {
+            if (req.path.startsWith('/assets/') || req.path.startsWith('/audio/')) {
+                const requestedFile = path.join(absoluteFrontendPath, req.path);
+                console.log('📁 Static file request:', {
+                    path: req.path,
+                    exists: existsSync(requestedFile),
+                    absolutePath: requestedFile
+                });
+            }
+            next();
+        });
         
         // Log static file requests for debugging
         if (process.env.NODE_ENV !== 'production') {
@@ -2293,7 +2324,7 @@ if (process.env.NODE_ENV === 'production') {
         
         // Handle React routing - return index.html for all non-API routes
         // This must be after all API routes and static file serving
-        app.get('*', (req, res) => {
+        app.get('*', (req, res, next) => {
             // Don't serve index.html for API routes or socket.io
             if (req.path.startsWith('/api')) {
                 console.warn(`⚠️  API route not found: ${req.method} ${req.path}`);
@@ -2313,19 +2344,31 @@ if (process.env.NODE_ENV === 'production') {
             // Check if it's a static asset request (has file extension)
             const hasExtension = /\.[a-zA-Z0-9]+$/.test(req.path);
             if (hasExtension) {
-                // This shouldn't happen if static middleware is working, but handle it anyway
+                // Static file should have been served by express.static, but if we get here, it doesn't exist
                 const requestedFile = path.join(frontendPath, req.path);
-                if (existsSync(requestedFile)) {
-                    return res.sendFile(requestedFile);
-                }
-                return res.status(404).send('File not found');
+                console.warn(`⚠️  Static file not found: ${req.path} (checked: ${requestedFile})`);
+                return res.status(404).json({ 
+                    error: 'File not found',
+                    path: req.path,
+                    message: 'The requested static file does not exist. Make sure the frontend was built correctly.'
+                });
             }
             
             // Serve index.html for all other routes (React Router)
-            res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
+            const indexPath = path.join(frontendPath, 'index.html');
+            if (!existsSync(indexPath)) {
+                console.error(`❌ index.html not found at: ${indexPath}`);
+                return res.status(500).json({ 
+                    error: 'Frontend not built',
+                    message: 'The frontend has not been built. Please run "npm run build" before starting the server.',
+                    expectedPath: indexPath
+                });
+            }
+            
+            res.sendFile(indexPath, (err) => {
                 if (err) {
                     console.error('Error serving index.html:', err);
-                    res.status(500).json({ error: 'Failed to serve frontend' });
+                    res.status(500).json({ error: 'Failed to serve frontend', details: err.message });
                 }
             });
         });
