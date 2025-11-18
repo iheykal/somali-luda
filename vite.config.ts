@@ -29,14 +29,40 @@ function loadServerEnv() {
 }
 
 export default defineConfig(({ mode }) => {
-    // Load environment variables from server/.env
+    // Load environment variables from server/.env (for local development)
     const serverEnv = loadServerEnv();
     
     // Also load from root as fallback (for VITE_ prefixed vars)
     const rootEnv = loadEnv(mode, '.', '');
     
-    // Merge: server env takes precedence, then root env
-    const mergedEnv = { ...rootEnv, ...serverEnv };
+    // Get environment variables from process.env (for production builds on Render/CI)
+    // These take highest priority as they come from the deployment environment
+    const processEnv: Record<string, string> = {};
+    const envKeys = [
+        'VITE_API_URL', 'API_URL',
+        'VITE_BACKEND_URL', 'BACKEND_URL',
+        'VITE_SOCKET_URL', 'SOCKET_URL',
+        'VITE_USE_REAL_API', 'USE_REAL_API',
+        'GEMINI_API_KEY'
+    ];
+    envKeys.forEach(key => {
+        if (process.env[key]) {
+            processEnv[key] = process.env[key];
+        }
+    });
+    
+    // Merge: process env (production) takes highest precedence, then server env (local dev), then root env
+    const mergedEnv = { ...rootEnv, ...serverEnv, ...processEnv };
+    
+    // Log environment variable sources for debugging (only in build mode)
+    if (mode === 'production') {
+        console.log('🔧 Vite Build Environment Variables:');
+        console.log('   Process Env:', Object.keys(processEnv).length > 0 ? processEnv : 'none');
+        console.log('   Server Env:', Object.keys(serverEnv).length > 0 ? 'loaded from server/.env' : 'not found');
+        console.log('   Merged VITE_API_URL:', mergedEnv.VITE_API_URL || mergedEnv.API_URL || 'not set');
+        console.log('   Merged VITE_SOCKET_URL:', mergedEnv.VITE_SOCKET_URL || mergedEnv.SOCKET_URL || 'not set');
+        console.log('   Merged VITE_USE_REAL_API:', mergedEnv.VITE_USE_REAL_API || mergedEnv.USE_REAL_API || 'false');
+    }
     
     return {
       root: '.',
