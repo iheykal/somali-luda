@@ -947,10 +947,10 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
             
             diceRollTimeoutRef.current = setTimeout(() => {
                 setDiceRollCountdown(null); // Clear countdown when timeout expires
-            }, 8000); // 8 seconds timeout
+
                 const latestState = stateRef.current;
                 const latestPlayer = latestState.players[latestState.currentPlayerIndex];
-                
+
                 // Double-check conditions before auto-rolling
                 // Auto-roll in both single-player and multiplayer modes
                 if (
@@ -962,21 +962,21 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                     const isStillPlayerTurn = isMultiplayer
                         ? (latestPlayer.color === multiplayerConfig?.localPlayerColor)
                         : (!latestPlayer.isAI);
-                    
+
                     if (isStillPlayerTurn) {
                         console.log('⏰ Auto-rolling dice after 8s timeout');
                         const wasDisconnected = !isConnectedRef.current;
-                        
+
                         // Mark bot as playing if player is disconnected
                         if (wasDisconnected) {
                             botPlayingRef.current = true;
                             console.log('🤖 Bot playing for disconnected player');
                         }
-                        
+
                         handleRollDiceRef.current?.();
                     }
                 }
-            }, 15000); // Always wait 15 seconds
+            }, 8000); // 8 seconds timeout
         }
 
         return () => {
