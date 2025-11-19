@@ -47,20 +47,30 @@ const corsOptions = {
             ];
             const isLocalNetwork = localNetworkPatterns.some(pattern => pattern.test(origin));
             
+            // Check if origin is a Render.com domain (same deployment platform)
+            const isRenderDomain = /^https:\/\/[\w-]+\.onrender\.com$/.test(origin);
+            
             if (isLocalNetwork) {
                 // Allow local network IPs even in production mode (for local testing)
                 console.log(`✅ CORS allowing local network origin (production mode): ${origin}`);
                 callback(null, origin);
+            } else if (isRenderDomain) {
+                // Allow any Render.com subdomain (same deployment platform)
+                console.log(`✅ CORS allowing Render.com origin: ${origin}`);
+                callback(null, true);
             } else if (allowedOrigins.includes(origin)) {
                 // Allow explicitly configured origins
+                console.log(`✅ CORS allowing configured origin: ${origin}`);
                 callback(null, true);
             } else {
                 // If FRONTEND_URL is not set, allow all (for same-origin deployment)
                 // Otherwise, reject
-                if (allowedOrigins.length === 0) {
+                if (allowedOrigins.length === 0 || allowedOrigins[0] === '') {
+                    console.log(`✅ CORS allowing all origins (FRONTEND_URL not configured)`);
                     callback(null, true);
                 } else {
                     console.warn(`⚠️  CORS blocked origin in production: ${origin}`);
+                    console.warn(`   Allowed origins: ${allowedOrigins.join(', ')}`);
                     callback(new Error('Not allowed by CORS'));
                 }
             }
