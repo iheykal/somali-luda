@@ -4,6 +4,7 @@ import type { Player, PlayerColor } from '../types';
 import { PLAYER_TAILWIND_COLORS } from '../lib/boardLayout';
 import { useAuth } from '../context/AuthContext';
 import { socketService } from '../services/socketService';
+import { getActiveGame, clearActiveGame } from './MultiplayerLobby';
 
 interface GameSetupProps {
   onStartGame: (players: Player[], config?: { gameId: string, localPlayerColor: PlayerColor, sessionId: string }) => void;
@@ -34,6 +35,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onStartGame, onEnterAdmin, onEnte
     yellow: true,
     blue: true,
   });
+  const [hasActiveGame, setHasActiveGame] = useState(false);
+  const [isRejoining, setIsRejoining] = useState(false);
 
   const handleStart = () => {
     const players: Player[] = ACTIVE_PLAYER_COLORS.map(color => ({
@@ -61,6 +64,16 @@ const GameSetup: React.FC<GameSetupProps> = ({ onStartGame, onEnterAdmin, onEnte
       socketService.off('search-cancelled');
     };
   }, [isSearching]);
+
+  // Check for active games on mount
+  useEffect(() => {
+    if (user?._id) {
+      const activeGame = getActiveGame();
+      if (activeGame && String(activeGame.userId) === String(user._id)) {
+        setHasActiveGame(true);
+      }
+    }
+  }, [user?._id]);
 
   const handleStartMultiplayer = () => {
     if (!user) {
@@ -211,6 +224,145 @@ const GameSetup: React.FC<GameSetupProps> = ({ onStartGame, onEnterAdmin, onEnte
     // Go back to bet selection lobby
     setMode('multiplayer_lobby');
   };
+
+  const handleRejoinGame = useCallback(() => {
+    if (!user?._id) return;
+
+    const activeGame = getActiveGame();
+    if (!activeGame || String(activeGame.userId) !== String(user._id)) {
+      alert('No active game found to rejoin');
+      setHasActiveGame(false);
+      return;
+    }
+
+    console.log('🔄 Starting rejoin process for game:', activeGame);
+    setIsRejoining(true);
+
+    let rejoinAttempted = false;
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    // Set up rejoin listeners BEFORE connecting
+    const handleRejoinSuccess = ({ gameId, playerColor, opponentName, betAmount }: { gameId: string; playerColor: string; opponentName: string; betAmount?: number }) => {
+      console.log('✅ Rejoin successful!', { gameId, playerColor, opponentName, betAmount });
+      setIsRejoining(false);
+      setHasActiveGame(false);
+
+      // Clean up timeout
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+
+      // Note: We don't remove the listeners here since other components might be using them
+      // The socket service now allows multiple listeners for the same events
+
+      // Create players array
+      const players: Player[] = [
+        {
+          color: 'red' as PlayerColor,
+          isAI: false,
+          name: playerColor === 'red' ? (user.username || user.phone || 'Player') : opponentName || 'Opponent'
+        },
+        {
+          color: 'yellow' as PlayerColor,
+          isAI: false,
+          name: playerColor === 'yellow' ? (user.username || user.phone || 'Player') : opponentName || 'Opponent'
+        }
+      ];
+
+      const finalSocketId = socketService.getSocketId() || getSessionId();
+
+      // Start the game with existing match
+      onStartGame(players, {
+        gameId,
+        localPlayerColor: playerColor as PlayerColor,
+        sessionId: finalSocketId
+      }, betAmount);
+    };
+
+    const handleRejoinError = ({ message }: { message: string }) => {
+      console.error('❌ Rejoin error received:', message);
+      setIsRejoining(false);
+      clearActiveGame(); // Clear invalid game info
+      setHasActiveGame(false);
+      alert(`Cannot rejoin game: ${message}`);
+
+      // Note: We don't remove the listeners here since other components might be using them
+      // The socket service now allows multiple listeners for the same events
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    // Set up listeners first - MUST be before connecting
+    socketService.onMatchFound(handleRejoinSuccess);
+    socketService.onRejoinError(handleRejoinError);
+
+    // Connect to socket
+    console.log('🔌 Connecting to socket service...');
+    socketService.connect();
+
+    // Function to attempt rejoin
+    const attemptRejoin = () => {
+      if (!rejoinAttempted && socketService.isConnected()) {
+        rejoinAttempted = true;
+        console.log('🔌 Socket connected, attempting rejoin...');
+
+        // Small delay to ensure socket is fully ready
+        setTimeout(() => {
+          if (socketService.isConnected()) {
+            console.log('📤 Sending rejoin request:', { userId: user._id, gameId: activeGame.gameId });
+            socketService.rejoinGame(user._id, activeGame.gameId);
+          } else {
+            console.log('❌ Socket not connected after delay');
+            setIsRejoining(false);
+            alert('Failed to connect to server. Please try again.');
+          }
+        }, 500);
+      }
+    };
+
+    // Listen for connect event
+    const connectionCleanup = socketService.onConnectionChange((connected) => {
+      console.log('🔌 Connection status changed:', connected);
+      if (connected && !rejoinAttempted) {
+        attemptRejoin();
+      }
+    });
+
+    // Check immediately if already connected
+    console.log('🔌 Current connection status:', socketService.isConnected());
+    if (socketService.isConnected()) {
+      attemptRejoin();
+    }
+
+    // Timeout after 10 seconds
+    timeoutId = setTimeout(() => {
+      if (rejoinAttempted && isRejoining) {
+        console.warn('⏱️ Rejoin timeout - no response from server');
+        setIsRejoining(false);
+        setHasActiveGame(false);
+        clearActiveGame();
+        alert('Rejoin timeout. Please try again.');
+        
+        // Clean up listeners on timeout
+        socketService.off('match-found', handleRejoinSuccess);
+        socketService.off('rejoin-error', handleRejoinError);
+        if (connectionCleanup) connectionCleanup();
+      }
+    }, 10000);
+
+    // Cleanup function
+    return () => {
+      socketService.off('match-found', handleRejoinSuccess);
+      socketService.off('rejoin-error', handleRejoinError);
+      if (connectionCleanup) connectionCleanup();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [user, onStartGame]);
   
   if (mode === 'local_setup') {
     return (
@@ -267,8 +419,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onStartGame, onEnterAdmin, onEnte
               <label className="block text-lg font-medium text-slate-300 mb-3">
                 Select Bet Amount *
               </label>
-              <div className="grid grid-cols-3 gap-3 mb-3">
-                {[0.5, 1, 2].map((amount) => (
+              <div className="grid grid-cols-4 gap-3 mb-3">
+                {[0.25, 0.5, 1, 2].map((amount) => (
                   <button
                     key={amount}
                     type="button"
@@ -356,7 +508,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onStartGame, onEnterAdmin, onEnte
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-800 p-4">
-      <h1 className="text-5xl font-bold mb-8 text-cyan-400">Gemini Ludo AI</h1>
+      <h1 className="text-5xl font-bold mb-8 text-cyan-400">Somali-Ludo 🎲</h1>
       <div className="bg-slate-700 p-8 rounded-xl shadow-2xl w-full max-w-md text-center">
         {user && (
           <div className="mb-6 p-4 bg-slate-600 rounded-lg">
@@ -371,9 +523,27 @@ const GameSetup: React.FC<GameSetupProps> = ({ onStartGame, onEnterAdmin, onEnte
           </div>
         )}
         <div className="space-y-4">
+          {hasActiveGame && !isRejoining && (
+            <button
+              onClick={handleRejoinGame}
+              disabled={isRejoining}
+              className="w-full flex items-center justify-center space-x-3 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold text-xl py-4 rounded-lg shadow-xl transition transform hover:scale-105 animate-pulse"
+            >
+              <span className="text-2xl">🔄</span>
+              <span>Rejoin Your Game</span>
+            </button>
+          )}
+
+          {isRejoining && (
+            <div className="w-full flex items-center justify-center space-x-3 bg-amber-600 text-white font-bold text-xl py-4 rounded-lg shadow-xl">
+              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-white"></div>
+              <span>Rejoining Game...</span>
+            </div>
+          )}
+
           <button
             onClick={handleStartMultiplayer}
-            disabled={!user || isSearching}
+            disabled={!user || isSearching || isRejoining}
             className="w-full flex items-center justify-center space-x-3 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold text-2xl py-4 rounded-lg shadow-xl transition transform hover:scale-105"
           >
             <span className="text-3xl">🧑‍🤝‍🧑</span>
@@ -381,10 +551,11 @@ const GameSetup: React.FC<GameSetupProps> = ({ onStartGame, onEnterAdmin, onEnte
           </button>
           <button
             onClick={() => setMode('local_setup')}
-            className="w-full flex items-center justify-center space-x-3 bg-green-600 hover:bg-green-500 text-white font-bold text-2xl py-4 rounded-lg shadow-xl transition transform hover:scale-105"
+            disabled={isRejoining}
+            className="w-full flex items-center justify-center space-x-3 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 text-white font-bold text-2xl py-4 rounded-lg shadow-xl transition transform hover:scale-105"
           >
             <span className="text-3xl">🤖</span>
-            <span>Play Local (vs AI/Human)</span>
+            <span>You VS Computer</span>
           </button>
         </div>
         <div className="mt-8 border-t border-slate-600 pt-6 space-y-3">

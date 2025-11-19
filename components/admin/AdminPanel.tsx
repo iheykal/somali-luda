@@ -44,6 +44,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
     const [userSearchQuery, setUserSearchQuery] = useState<string>('');
     const [userDetailTab, setUserDetailTab] = useState<'matches' | 'transactions'>('matches');
     const [userSortBy, setUserSortBy] = useState<'default' | 'profit' | 'balance' | 'matches'>('default');
+    
+    // Password reset state
+    const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+    const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null);
+    const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+    const [resetCode, setResetCode] = useState<string | null>(null);
+    const [resetPhone, setResetPhone] = useState<string | null>(null);
 
     // Stats state
     const [gameStats, setGameStats] = useState<any>(null);
@@ -149,6 +156,31 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
         setUserDetailTab('matches');
     };
 
+    const handleResetPassword = async () => {
+        if (!resetPasswordUserId) {
+            setError('User ID is required');
+            return;
+        }
+
+        setResetPasswordLoading(true);
+        setError('');
+
+        try {
+            const result = await adminAPI.resetUserPassword(resetPasswordUserId);
+            if (result.error) {
+                setError(result.error);
+            } else {
+                setResetCode(result.resetCode);
+                setResetPhone(result.phone);
+                // Keep modal open to show the reset code
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to generate reset code');
+        } finally {
+            setResetPasswordLoading(false);
+        }
+    };
+
     const handleRejectTransaction = async (transactionId: string) => {
         try {
             const reason = prompt('Please provide a reason for rejection:');
@@ -247,6 +279,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
                                          transaction.withdrawalMethod}
                                     </span>
                                 </p>
+                            )}
+                            {transaction.depositDetails && transaction.depositDetails.phoneNumber && (
+                                <div style={{ marginTop: '12px', padding: '12px', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                                    <p style={{ fontSize: '14px', color: '#111827', margin: '4px 0', fontWeight: '600' }}>Deposit Phone Number:</p>
+                                    <p style={{ fontSize: '14px', color: '#111827', margin: '4px 0' }}>{transaction.depositDetails.phoneNumber}</p>
+                                </div>
                             )}
                             {transaction.withdrawalDetails && (
                                 <div style={{ marginTop: '12px', padding: '12px', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
@@ -944,6 +982,39 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
                             <p style={{ margin: '0', color: '#6b7280', fontSize: '14px' }}>
                                 Phone: {selectedUser.phone || 'N/A'} | Balance: ${(selectedUser.balance || 0).toFixed(2)}
                             </p>
+                            {/* Reset Password Button - Only for SuperAdmin */}
+                            {isSuperAdmin && (
+                                <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
+                                    <button
+                                        onClick={() => {
+                                            setResetPasswordUserId(selectedUser._id || selectedUser.id);
+                                            setShowResetPasswordModal(true);
+                                        }}
+                                        style={{
+                                            padding: '10px 20px',
+                                            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            cursor: 'pointer',
+                                            fontWeight: '600',
+                                            fontSize: '14px',
+                                            transition: 'all 0.2s',
+                                            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.transform = 'translateY(-2px)';
+                                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.transform = 'translateY(0)';
+                                            e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
+                                        }}
+                                    >
+                                        🔑 Reset Password
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Tab Navigation */}
@@ -1331,6 +1402,231 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
                         >
                             Close
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Reset Password Modal */}
+            {showResetPasswordModal && (
+                <div 
+                    className={styles.successModalOverlay} 
+                    onClick={() => {
+                        setShowResetPasswordModal(false);
+                        setResetPasswordUserId(null);
+                        setResetCode(null);
+                        setResetPhone(null);
+                        setError('');
+                    }}
+                    style={{ zIndex: 10003 }}
+                >
+                    <div 
+                        className={styles.successModal} 
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ maxWidth: '500px' }}
+                    >
+                        <h2 style={{ 
+                            margin: '0 0 20px 0', 
+                            fontSize: '24px', 
+                            fontWeight: '700',
+                            color: '#111827'
+                        }}>
+                            🔑 Reset Password
+                        </h2>
+                        
+                        {!resetCode ? (
+                            <>
+                                <p style={{ 
+                                    margin: '0 0 20px 0', 
+                                    color: '#6b7280', 
+                                    fontSize: '14px' 
+                                }}>
+                                    Generate a reset code for this user. The user will need to enter their phone number and this code to set a new password.
+                                </p>
+
+                                {error && (
+                                    <div style={{
+                                        padding: '16px',
+                                        background: '#fee2e2',
+                                        border: '2px solid #ef4444',
+                                        borderRadius: '8px',
+                                        color: '#991b1b',
+                                        marginBottom: '20px',
+                                        fontSize: '14px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '10px'
+                                    }}>
+                                        <span style={{ fontSize: '20px' }}>❌</span>
+                                        <span><strong>Error:</strong> {error}</span>
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', gap: '12px' }}>
+                                    <button
+                                        onClick={handleResetPassword}
+                                        disabled={resetPasswordLoading}
+                                        style={{
+                                            flex: 1,
+                                            padding: '12px 24px',
+                                            background: resetPasswordLoading
+                                                ? '#9ca3af'
+                                                : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            cursor: resetPasswordLoading ? 'not-allowed' : 'pointer',
+                                            fontWeight: '600',
+                                            fontSize: '15px',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        {resetPasswordLoading ? 'Generating...' : 'Generate Reset Code'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowResetPasswordModal(false);
+                                            setResetPasswordUserId(null);
+                                            setResetCode(null);
+                                            setResetPhone(null);
+                                            setError('');
+                                        }}
+                                        style={{
+                                            padding: '12px 24px',
+                                            background: '#f3f4f6',
+                                            color: '#374151',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            cursor: 'pointer',
+                                            fontWeight: '600',
+                                            fontSize: '15px',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div style={{
+                                    padding: '20px',
+                                    background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                                    borderRadius: '12px',
+                                    border: '2px solid #10b981',
+                                    marginBottom: '20px',
+                                    textAlign: 'center'
+                                }}>
+                                    <div style={{
+                                        fontSize: '16px',
+                                        color: '#065f46',
+                                        fontWeight: '700',
+                                        marginBottom: '12px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px'
+                                    }}>
+                                        <span style={{ fontSize: '24px' }}>✅</span>
+                                        <span>Reset Code Generated Successfully!</span>
+                                    </div>
+                                    <div style={{
+                                        fontSize: '42px',
+                                        fontWeight: '700',
+                                        color: '#065f46',
+                                        letterSpacing: '12px',
+                                        marginBottom: '16px',
+                                        fontFamily: 'monospace',
+                                        padding: '16px',
+                                        background: '#ffffff',
+                                        borderRadius: '8px',
+                                        border: '2px solid #10b981',
+                                        boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)'
+                                    }}>
+                                        {resetCode}
+                                    </div>
+                                    <div style={{
+                                        fontSize: '14px',
+                                        color: '#047857',
+                                        marginBottom: '8px',
+                                        fontWeight: '600'
+                                    }}>
+                                        📱 Phone: {resetPhone}
+                                    </div>
+                                    <div style={{
+                                        fontSize: '12px',
+                                        color: '#6b7280',
+                                        marginTop: '12px',
+                                        padding: '12px',
+                                        background: '#ffffff',
+                                        borderRadius: '8px',
+                                        textAlign: 'left'
+                                    }}>
+                                        <strong>Instructions for user:</strong>
+                                        <ol style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                                            <li>Go to the password reset page</li>
+                                            <li>Enter phone number: <strong>{resetPhone}</strong></li>
+                                            <li>Enter reset code: <strong>{resetCode}</strong></li>
+                                            <li>Set a new password (minimum 6 characters)</li>
+                                        </ol>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={() => {
+                                        // Copy reset code to clipboard
+                                        navigator.clipboard.writeText(resetCode);
+                                        alert('Reset code copied to clipboard!');
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 24px',
+                                        background: '#f3f4f6',
+                                        color: '#374151',
+                                        border: '2px solid #e5e7eb',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontWeight: '600',
+                                        fontSize: '15px',
+                                        marginBottom: '12px',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = '#e5e7eb';
+                                        e.currentTarget.style.borderColor = '#d1d5db';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = '#f3f4f6';
+                                        e.currentTarget.style.borderColor = '#e5e7eb';
+                                    }}
+                                >
+                                    📋 Copy Reset Code
+                                </button>
+
+                                <button
+                                    onClick={() => {
+                                        setShowResetPasswordModal(false);
+                                        setResetPasswordUserId(null);
+                                        setResetCode(null);
+                                        setResetPhone(null);
+                                        setError('');
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 24px',
+                                        background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontWeight: '600',
+                                        fontSize: '15px',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    Close
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

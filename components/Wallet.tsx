@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { walletAPI } from '../services/walletAPI';
+import { authAPI } from '../services/authAPI';
 import { useAuth } from '../context/AuthContext';
 import SuccessModal from './SuccessModal';
 import styles from './Wallet.module.css';
+import type { PlayerColor } from '../types';
 
 interface Transaction {
     _id: string;
@@ -15,18 +17,39 @@ interface Transaction {
     balanceAfter: number;
 }
 
-const Wallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
+interface ActiveGame {
+    gameId: string;
+    playerColor: PlayerColor;
+    opponentName: string;
+    betAmount: number;
+    gameStarted: boolean;
+    turnState: string;
+    playerConnected: boolean;
+    playerBotMode: boolean;
+}
+
+interface WalletProps {
+    onExit: () => void;
+    onRejoinGame?: (gameId: string, playerColor: PlayerColor, betAmount: number) => void;
+}
+
+const Wallet: React.FC<WalletProps> = ({ onExit, onRejoinGame }) => {
     const { user, updateBalance } = useAuth();
-    const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'history'>('deposit');
+    const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'history' | 'games'>('deposit');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [successModalMessage, setSuccessModalMessage] = useState('');
     const [transactionType, setTransactionType] = useState<'deposit' | 'withdraw'>('deposit');
+    
+    // Active games
+    const [activeGames, setActiveGames] = useState<ActiveGame[]>([]);
+    const [loadingGames, setLoadingGames] = useState(false);
+    const [rejoiningGameId, setRejoiningGameId] = useState<string | null>(null);
 
     // Deposit form
     const [depositAmount, setDepositAmount] = useState('');
-    const [paymentReference, setPaymentReference] = useState('');
+    const [depositPhoneNumber, setDepositPhoneNumber] = useState('');
 
     // Withdrawal form
     const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -41,8 +64,61 @@ const Wallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     useEffect(() => {
         if (activeTab === 'history') {
             loadTransactionHistory();
+        } else if (activeTab === 'games') {
+            loadActiveGames();
         }
     }, [activeTab]);
+    
+    const loadActiveGames = async () => {
+        setLoadingGames(true);
+        setError('');
+        try {
+            const result = await authAPI.getActiveGames();
+            if (result.error) {
+                setError(result.error);
+                setActiveGames([]);
+            } else {
+                setActiveGames(result.activeGames || []);
+            }
+        } catch (err: any) {
+            setError('Failed to load active games');
+            setActiveGames([]);
+        } finally {
+            setLoadingGames(false);
+        }
+    };
+    
+    const handleRejoinGame = async (game: ActiveGame) => {
+        if (!user?._id) {
+            setError('You must be logged in to rejoin a game');
+            return;
+        }
+        
+        if (!onRejoinGame) {
+            setError('Rejoin functionality not available. Please navigate to multiplayer lobby.');
+            return;
+        }
+        
+        setRejoiningGameId(game.gameId);
+        setError('');
+        
+        try {
+            // Save game info to localStorage for rejoin
+            const activeGameInfo = {
+                gameId: game.gameId,
+                playerColor: game.playerColor,
+                betAmount: game.betAmount,
+                userId: user._id
+            };
+            localStorage.setItem('ludoActiveGame', JSON.stringify(activeGameInfo));
+            
+            // Navigate to game via onRejoinGame callback
+            onRejoinGame(game.gameId, game.playerColor, game.betAmount);
+        } catch (err: any) {
+            setError('Failed to rejoin game. Please try again.');
+            setRejoiningGameId(null);
+        }
+    };
 
     const loadTransactionHistory = async () => {
         setLoadingHistory(true);
@@ -73,7 +149,7 @@ const Wallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         }
 
         try {
-            const result = await walletAPI.deposit(amount, paymentReference || undefined);
+            const result = await walletAPI.deposit(amount, depositPhoneNumber || undefined);
             if (result.error) {
                 setError(result.error);
             } else {
@@ -81,7 +157,7 @@ const Wallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                 setTransactionType('deposit');
                 setShowSuccessModal(true);
                 setDepositAmount('');
-                setPaymentReference('');
+                setDepositPhoneNumber('');
                 updateBalance();
             }
         } catch (err: any) {
@@ -211,6 +287,12 @@ const Wallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                         >
                             📜 History
                         </button>
+                        <button
+                            className={activeTab === 'games' ? styles.activeTab : ''}
+                            onClick={() => setActiveTab('games')}
+                        >
+                            🎮 Active Games
+                        </button>
                     </div>
                 </div>
 
@@ -237,13 +319,13 @@ const Wallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                             </div>
 
                             <div className={styles.formGroup}>
-                                <label htmlFor="paymentReference">Payment Reference (Optional)</label>
+                                <label htmlFor="depositPhoneNumber">Geli numberkaa kasoo dirtay lacagta</label>
                                 <input
-                                    id="paymentReference"
-                                    type="text"
-                                    value={paymentReference}
-                                    onChange={(e) => setPaymentReference(e.target.value)}
-                                    placeholder="Transaction reference number"
+                                    id="depositPhoneNumber"
+                                    type="tel"
+                                    value={depositPhoneNumber}
+                                    onChange={(e) => setDepositPhoneNumber(e.target.value)}
+                                    placeholder="Enter phone number"
                                     disabled={loading}
                                 />
                             </div>
@@ -388,6 +470,78 @@ const Wallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === 'games' && (
+                        <div className={styles.historySection}>
+                            <div className={styles.sectionTitle}>Active Games</div>
+                            {loadingGames ? (
+                                <div className={styles.loadingState}>
+                                    <div className={styles.spinner}></div>
+                                    <p>Loading active games...</p>
+                                </div>
+                            ) : activeGames.length > 0 ? (
+                                <div className={styles.transactionsList}>
+                                    {activeGames.map((game) => (
+                                        <div key={game.gameId} className={styles.transactionCard}>
+                                            <div className={styles.transactionHeader}>
+                                                <div className={styles.transactionLeft}>
+                                                    <div className={styles.transactionIcon}>
+                                                        🎮
+                                                    </div>
+                                                    <div className={styles.transactionInfo}>
+                                                        <span className={styles.transactionType}>Game {game.gameId.substring(0, 8)}...</span>
+                                                        <span className={styles.transactionDescription}>
+                                                            Opponent: {game.opponentName} | Bet: ${game.betAmount.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className={styles.transactionRight}>
+                                                    <span className={`${styles.statusBadge} ${styles[game.playerConnected ? 'approved' : 'pending']}`}>
+                                                        {game.playerConnected ? 'Connected' : 'Disconnected'}
+                                                        {game.playerBotMode && ' (Bot)'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className={styles.transactionFooter}>
+                                                <div>
+                                                    <span style={{ 
+                                                        fontWeight: 'bold',
+                                                        color: game.playerColor === 'red' ? '#ef4444' : 
+                                                               game.playerColor === 'yellow' ? '#eab308' : 
+                                                               game.playerColor === 'green' ? '#22c55e' : '#3b82f6'
+                                                    }}>
+                                                        Your Color: {game.playerColor.toUpperCase()}
+                                                    </span>
+                                                    <span className={styles.transactionDate} style={{ marginLeft: '12px' }}>
+                                                        Status: {game.gameStarted ? game.turnState : 'Waiting to start'}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRejoinGame(game)}
+                                                    disabled={rejoiningGameId === game.gameId}
+                                                    className={styles.primaryButton}
+                                                    style={{
+                                                        backgroundColor: game.playerConnected ? '#10b981' : '#3b82f6',
+                                                        opacity: rejoiningGameId === game.gameId ? 0.6 : 1,
+                                                        cursor: rejoiningGameId === game.gameId ? 'not-allowed' : 'pointer',
+                                                        marginTop: '8px'
+                                                    }}
+                                                >
+                                                    {rejoiningGameId === game.gameId ? 'Rejoining...' : 'Rejoin Game'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className={styles.emptyState}>
+                                    <div className={styles.emptyIcon}>🎮</div>
+                                    <p>No active games found</p>
+                                    <small>Start a new multiplayer match to begin playing!</small>
                                 </div>
                             )}
                         </div>

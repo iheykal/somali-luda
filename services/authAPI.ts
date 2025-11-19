@@ -233,6 +233,28 @@ export const authAPI = {
 
         const user = mockUsers[0];
         return { balance: user?.balance || 0 };
+    },
+    
+    getActiveGames: async () => {
+        if (USE_REAL_API) {
+            try {
+                const response = await fetch(`${API_URL}/auth/active-games`, {
+                    headers: getAuthHeader()
+                });
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+                    return { activeGames: [], error: errorData.error };
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('Get active games error:', error);
+                return { activeGames: [], error: 'Failed to load active games' };
+            }
+        }
+
+        // Mock implementation
+        await delay(300);
+        return { activeGames: [] };
     }
 };
 

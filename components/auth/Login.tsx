@@ -5,9 +5,10 @@ import styles from './Auth.module.css';
 interface LoginProps {
     onSuccess?: () => void;
     onSwitchToRegister?: () => void;
+    onSwitchToResetPassword?: () => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onSuccess, onSwitchToRegister }) => {
+const Login: React.FC<LoginProps> = ({ onSuccess, onSwitchToRegister, onSwitchToResetPassword }) => {
     const [formData, setFormData] = useState({
         phone: '',
         password: ''
@@ -103,6 +104,11 @@ const Login: React.FC<LoginProps> = ({ onSuccess, onSwitchToRegister }) => {
                     </button>
                 </form>
 
+                {onSwitchToResetPassword && (
+                    <p className={styles.switchAuth} style={{ marginTop: '12px', marginBottom: '8px' }}>
+                        <button type="button" onClick={onSwitchToResetPassword} className={styles.linkButton}>Forgot Password?</button>
+                    </p>
+                )}
                 {onSwitchToRegister && (
                     <p className={styles.switchAuth}>
                         Don't have an account? <button type="button" onClick={onSwitchToRegister} className={styles.linkButton}>Register here</button>

@@ -14,16 +14,30 @@ class SocketService {
     // Check if we're in a browser environment
     if (typeof window !== 'undefined') {
       const hostname = window.location.hostname;
-      const isProduction = hostname !== 'localhost' && hostname !== '127.0.0.1';
+      const port = window.location.port;
 
-      if (isProduction) {
-        // In production, use same origin (works when frontend and backend are on same domain)
-        // This is for Render deployment where both are served together
+      // Check if this is a deployed environment (not local development)
+      const isDeployed = hostname !== 'localhost' && hostname !== '127.0.0.1' &&
+                        !hostname.startsWith('192.168.') &&
+                        !hostname.startsWith('10.') &&
+                        !hostname.startsWith('172.');
+
+      if (isDeployed) {
+        // In deployed production (like Render), use same origin (frontend and backend on same domain)
         return window.location.origin;
+      } else {
+        // Local development: use localhost or network IP with backend port (3001)
+        // For network IPs (192.168.x.x, etc.), construct URL with backend port
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+          return 'http://localhost:3001';
+        } else {
+          // Network IP: use same hostname but backend port (3001)
+          return `http://${hostname}:3001`;
+        }
       }
     }
 
-    // Development fallback
+    // Fallback
     return 'http://localhost:3001';
   }
 
@@ -139,15 +153,14 @@ class SocketService {
     this.socket?.on('searching', callback);
   }
 
-  onMatchFound(callback: (data: { gameId: string; playerColor: string; opponentName: string }) => void) {
+  onMatchFound(callback: (data: { gameId: string; playerColor: string; opponentName: string; betAmount?: number }) => void) {
     console.log('📡 Setting up match-found listener');
     if (!this.socket) {
       console.error('❌ Cannot set up match-found listener: socket is null');
       return;
     }
-    // Remove any existing listener first to avoid duplicates
-    this.socket.off('match-found');
-    // Set up the listener
+    // Don't remove existing listeners - allow multiple listeners for rejoin functionality
+    // This allows both App and GameSetup to listen to the same event
     this.socket.on('match-found', (data) => {
       console.log('📨 Received match-found event in callback:', data);
       this.gameId = data.gameId;
@@ -183,6 +196,44 @@ class SocketService {
 
   onPlayerDisconnected(callback: (data: any) => void) {
     this.socket?.on('player-disconnected', callback);
+  }
+
+  onPlayerReconnected(callback: (data: any) => void) {
+    this.socket?.on('player-reconnected', callback);
+  }
+
+  onPlayerStatus(callback: (data: any) => void) {
+    this.socket?.on('player-status', callback);
+  }
+
+  onRejoinError(callback: (data: any) => void) {
+    // Don't remove existing listeners for rejoin-error to allow multiple listeners
+    this.socket?.on('rejoin-error', callback);
+  }
+
+  rejoinGame(userId: string, gameId?: string) {
+    if (!this.socket) {
+      console.warn('Cannot rejoin game: socket not initialized');
+      return;
+    }
+    
+    if (!this.socket.connected) {
+      console.warn('Cannot rejoin game: socket not connected, waiting...');
+      // Wait for connection
+      const checkConnection = () => {
+        if (this.socket?.connected) {
+          console.log('🔄 Socket connected, now attempting rejoin:', { userId, gameId });
+          this.socket.emit('rejoin-game', { userId, gameId });
+        } else {
+          setTimeout(checkConnection, 100);
+        }
+      };
+      setTimeout(checkConnection, 100);
+      return;
+    }
+    
+    console.log('🔄 Attempting to rejoin game:', { userId, gameId });
+    this.socket.emit('rejoin-game', { userId, gameId });
   }
 
   onConnectionChange(callback: (connected: boolean) => void): (() => void) | undefined {

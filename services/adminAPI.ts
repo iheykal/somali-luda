@@ -372,6 +372,24 @@ export const adminAPI = {
             console.error('Diagnose matches error:', error);
             return { error: 'Failed to diagnose matches' };
         }
+    },
+    
+    resetUserPassword: async (userId: string) => {
+        try {
+            const response = await authenticatedFetch(`${API_URL}/admin/users/${userId}/reset-password`, {
+                method: 'POST',
+                body: JSON.stringify({})
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}: ${response.statusText}` }));
+                return errorData;
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Reset password error:', error);
+            return { error: 'Failed to generate reset code' };
+        }
     }
 };
 

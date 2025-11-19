@@ -38,6 +38,7 @@ export interface GameState {
   winners: PlayerColor[];
   legalMoves: LegalMove[];
   _pendingExtraTurn?: boolean;
+  betAmount?: number; // Bet amount for multiplayer games
   winnerInfo?: {
     winnerColor: PlayerColor;
     winnerAmount: number;

@@ -964,7 +964,7 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                         : (!latestPlayer.isAI);
 
                     if (isStillPlayerTurn) {
-                        console.log('⏰ Auto-rolling dice after 8s timeout');
+                        // console.log('⏰ Auto-rolling dice after 8s timeout');
                         const wasDisconnected = !isConnectedRef.current;
 
                         // Mark bot as playing if player is disconnected

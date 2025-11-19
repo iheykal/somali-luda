@@ -103,11 +103,11 @@ const authenticatedFetch = async (url: string, options: RequestInit = {}) => {
 
 export const walletAPI = {
     // Deposit money
-    deposit: async (amount: number, paymentReference?: string, paymentGateway?: string) => {
+    deposit: async (amount: number, phoneNumber?: string) => {
         try {
             const response = await authenticatedFetch(`${API_URL}/wallet/deposit`, {
                 method: 'POST',
-                body: JSON.stringify({ amount, paymentReference, paymentGateway })
+                body: JSON.stringify({ amount, phoneNumber })
             });
 
             if (!response.ok) {

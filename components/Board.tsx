@@ -41,42 +41,33 @@ const Board: React.FC<BoardProps> = ({ gameState, onMoveToken, onAnimationComple
   const capturedTokensRef = useRef<number>(0);
   const prevTokens = usePrevious(tokens);
 
-  // Helper function to get display color: based on board position
-  // Board layout: Red=bottom-left, Green=top-left, Yellow=top-right, Blue=bottom-right
-  // Display: Local player=blue, others mapped: green→green, yellow→red, red→red, blue→yellow
+  // Helper function to get display color: each player sees themselves as bottom-left (red) and opponent as top-right (yellow)
   const getDisplayColor = (tokenColor: PlayerColor): PlayerColor => {
     if (localPlayerColor) {
-      // Multiplayer: local player always = blue
+      // Multiplayer: local player always appears as red (bottom-left)
       if (tokenColor === localPlayerColor) {
-        return 'blue';
+        return 'red';
       }
-      
-      // Map opponents based on their original board position
-      // Top-left (green) → green, Top-right (yellow) → red, Bottom-left (red) → red, Bottom-right (blue) → yellow
-      const positionColorMap: Record<PlayerColor, PlayerColor> = {
-        'green': 'green',   // top-left → green
-        'yellow': 'red',    // top-right → red
-        'red': 'red',       // bottom-left → red
-        'blue': 'yellow'    // bottom-right → yellow (for opponents)
-      };
-      
-      return positionColorMap[tokenColor] || 'red';
+
+      // Find the opponent (assuming 2-player game for now)
+      const opponent = players.find(p => p.color !== localPlayerColor);
+      if (opponent && tokenColor === opponent.color) {
+        return 'yellow'; // opponent appears as top-right
+      }
+
+      // For games with more than 2 players, map other players to their original colors
+      return tokenColor;
     } else {
-      // Local game: map based on board position
-      // First player (in order) = blue, others based on their original color position
-      const positionColorMap: Record<PlayerColor, PlayerColor> = {
-        'green': 'green',   // top-left → green
-        'yellow': 'red',    // top-right → red
-        'red': 'red',       // bottom-left → red
-        'blue': 'yellow'    // bottom-right → yellow
-      };
-      
-      // If first player, make them blue, otherwise use position-based color
+      // Local game: first player = red (bottom-left), second player = yellow (top-right)
       if (tokenColor === players[0]?.color) {
-        return 'blue';
+        return 'red';
       }
-      
-      return positionColorMap[tokenColor] || 'red';
+      if (tokenColor === players[1]?.color) {
+        return 'yellow';
+      }
+
+      // Other players keep their original colors
+      return tokenColor;
     }
   };
 
@@ -162,7 +153,12 @@ const Board: React.FC<BoardProps> = ({ gameState, onMoveToken, onAnimationComple
           
           // If all animations are complete, call onAnimationComplete
           if (next.size === 0) {
-            console.log('✅ All animations complete', { isMyTurn, isCurrentPlayerTurn, currentPlayer: currentPlayer?.color });
+            console.log('✅ All animations complete', { 
+              isMyTurn, 
+              isCurrentPlayerTurn, 
+              currentPlayer: currentPlayer?.color,
+              turnState: gameState.turnState
+            });
             setAnimation(null);
             // Only call onAnimationComplete if it's the current player's turn
             // The other player will receive ANIMATION_COMPLETE via WebSocket
@@ -172,6 +168,13 @@ const Board: React.FC<BoardProps> = ({ gameState, onMoveToken, onAnimationComple
               const delay = capturedTokensRef.current > 0 ? 800 : 0;
               setTimeout(() => {
                 capturedTokensRef.current = 0; // Reset after delay
+                // In multiplayer, state updates from other players can change turnState before local animation completes
+                // We need to call onAnimationComplete regardless of turnState to prevent getting stuck
+                console.log('🎬 Animation sequence complete - calling onAnimationComplete', {
+                  turnState: gameState.turnState,
+                  isCurrentPlayerTurn,
+                  pendingAnimationsCount: 0
+                });
                 onAnimationComplete();
               }, delay);
             } else {

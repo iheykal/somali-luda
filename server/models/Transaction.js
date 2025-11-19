@@ -32,6 +32,10 @@ const transactionSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    // For deposits
+    depositDetails: {
+        phoneNumber: String
+    },
     // For withdrawals
     withdrawalMethod: {
         type: String,
@@ -56,15 +60,6 @@ const transactionSchema = new mongoose.Schema({
     },
     processedAt: {
         type: Date,
-        default: null
-    },
-    // For deposits (payment gateway integration)
-    paymentReference: {
-        type: String,
-        default: null
-    },
-    paymentGateway: {
-        type: String,
         default: null
     },
     gameId: {

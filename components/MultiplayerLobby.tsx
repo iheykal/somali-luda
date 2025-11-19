@@ -5,7 +5,7 @@ import { socketService } from '../services/socketService';
 import { useAuth } from '../context/AuthContext';
 
 interface MultiplayerLobbyProps {
-  onStartGame: (players: Player[], config: { gameId: string, localPlayerColor: PlayerColor, sessionId: string }) => void;
+  onStartGame: (players: Player[], config: { gameId: string, localPlayerColor: PlayerColor, sessionId: string }, betAmount?: number) => void;
   onExit: () => void;
 }
 
@@ -40,12 +40,55 @@ const StopIcon: React.FC = () => (
     </svg>
 );
 
+// Storage keys for active game
+const ACTIVE_GAME_KEY = 'ludoActiveGame';
+
+interface ActiveGameInfo {
+    gameId: string;
+    playerColor: PlayerColor;
+    betAmount: number;
+    userId: string;
+}
+
+const saveActiveGame = (gameInfo: ActiveGameInfo) => {
+    try {
+        localStorage.setItem(ACTIVE_GAME_KEY, JSON.stringify(gameInfo));
+        console.log('💾 Saved active game info:', gameInfo);
+    } catch (error) {
+        console.error('Failed to save active game:', error);
+    }
+};
+
+const getActiveGame = (): ActiveGameInfo | null => {
+    try {
+        const stored = localStorage.getItem(ACTIVE_GAME_KEY);
+        if (stored) {
+            const gameInfo = JSON.parse(stored);
+            console.log('📖 Retrieved active game info:', gameInfo);
+            return gameInfo;
+        }
+    } catch (error) {
+        console.error('Failed to get active game:', error);
+    }
+    return null;
+};
+
+const clearActiveGame = () => {
+    try {
+        localStorage.removeItem(ACTIVE_GAME_KEY);
+        console.log('🗑️ Cleared active game info');
+    } catch (error) {
+        console.error('Failed to clear active game:', error);
+    }
+};
+
 const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({ onStartGame, onExit }) => {
     const { user } = useAuth();
     const [playerName, setPlayerName] = useState(getPlayerName());
     const [isSearching, setIsSearching] = useState(false);
     const [searchMessage, setSearchMessage] = useState('');
     const [selectedBetAmount, setSelectedBetAmount] = useState<number | null>(null);
+    const [isRejoining, setIsRejoining] = useState(false);
     const sessionId = getSessionId();
 
     // Handle bet amount selection
@@ -73,6 +116,147 @@ const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({ onStartGame, onExit
         );
     }
 
+    // Check for active game on mount
+    useEffect(() => {
+        if (!user?._id) return;
+
+        const activeGame = getActiveGame();
+        
+        // Check if user has an active game and attempt to rejoin
+        // Compare userIds as strings to handle ObjectId/string mismatch
+        if (activeGame && String(activeGame.userId) === String(user._id)) {
+            console.log('🔄 Found active game, attempting to rejoin...', activeGame);
+            setIsRejoining(true);
+            setSearchMessage('Rejoining your game...');
+            
+            let rejoinAttempted = false;
+            let timeoutId: NodeJS.Timeout | null = null;
+            
+            // Set up rejoin listeners BEFORE connecting
+            const handleRejoinSuccess = ({ gameId, playerColor, opponentName, betAmount }: { gameId: string; playerColor: string; opponentName: string; betAmount?: number }) => {
+                console.log('✅ Rejoined game!', { gameId, playerColor, opponentName });
+                setIsRejoining(false);
+                setSearchMessage('');
+                
+                // Clean up timeout
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
+                
+                // Clean up listeners
+                socketService.off('match-found', handleRejoinSuccess);
+                socketService.off('rejoin-error', handleRejoinError);
+                
+                // Create players array
+                const players: Player[] = [
+                    { 
+                        color: 'red' as PlayerColor, 
+                        isAI: false,
+                        name: playerColor === 'red' ? playerName.trim() : opponentName || 'Opponent'
+                    },
+                    { 
+                        color: 'yellow' as PlayerColor, 
+                        isAI: false,
+                        name: playerColor === 'yellow' ? playerName.trim() : opponentName || 'Opponent'
+                    }
+                ];
+                
+                const finalSocketId = socketService.getSocketId() || sessionId;
+                
+                // Start the game with existing match
+                onStartGame(players, {
+                    gameId,
+                    localPlayerColor: playerColor as PlayerColor,
+                    sessionId: finalSocketId
+                }, betAmount);
+            };
+
+            const handleRejoinError = ({ message }: { message: string }) => {
+                console.error('❌ Rejoin error:', message);
+                setIsRejoining(false);
+                setSearchMessage('');
+                clearActiveGame(); // Clear invalid game info
+                alert(`Cannot rejoin game: ${message}`);
+                
+                // Clean up listeners
+                socketService.off('match-found', handleRejoinSuccess);
+                socketService.off('rejoin-error', handleRejoinError);
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
+            };
+            
+            // Set up listeners first
+            socketService.onMatchFound(handleRejoinSuccess);
+            socketService.onRejoinError(handleRejoinError);
+            
+            // Connect to socket
+            socketService.connect();
+            
+            // Wait for actual connection event before attempting rejoin
+            const handleConnect = () => {
+                if (!rejoinAttempted && socketService.isConnected()) {
+                    rejoinAttempted = true;
+                    console.log('🔌 Socket connected, attempting rejoin...');
+                    
+                    // Small delay to ensure socket is fully ready
+                    setTimeout(() => {
+                        if (socketService.isConnected()) {
+                            console.log('📤 Sending rejoin request:', { userId: user._id, gameId: activeGame.gameId });
+                            socketService.rejoinGame(user._id, activeGame.gameId);
+                        } else {
+                            console.log('❌ Socket not connected after delay');
+                            setIsRejoining(false);
+                            setSearchMessage('');
+                            alert('Failed to connect to server. Please try again.');
+                        }
+                    }, 500);
+                }
+            };
+            
+            // Listen for connect event
+            const connectionCleanup = socketService.onConnectionChange((connected) => {
+                console.log('🔌 Connection status changed:', connected);
+                if (connected && !rejoinAttempted) {
+                    handleConnect();
+                }
+            });
+            
+            // Also check immediately if already connected
+            if (socketService.isConnected()) {
+                handleConnect();
+            }
+            
+            // Timeout after 10 seconds
+            timeoutId = setTimeout(() => {
+                if (rejoinAttempted && isRejoining) {
+                    console.warn('⏱️ Rejoin timeout - no response from server');
+                    setIsRejoining(false);
+                    setSearchMessage('');
+                    clearActiveGame();
+                    alert('Rejoin timeout. Please try again.');
+                    
+                    // Clean up listeners on timeout
+                    socketService.off('match-found', handleRejoinSuccess);
+                    socketService.off('rejoin-error', handleRejoinError);
+                    if (connectionCleanup) connectionCleanup();
+                }
+            }, 10000);
+            
+            // Cleanup function
+            return () => {
+                socketService.off('match-found', handleRejoinSuccess);
+                socketService.off('rejoin-error', handleRejoinError);
+                if (connectionCleanup) connectionCleanup();
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+            };
+        }
+    }, [user?._id, playerName, sessionId, onStartGame]);
+
     useEffect(() => {
         // Clean up on unmount
         return () => {
@@ -85,8 +269,9 @@ const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({ onStartGame, onExit
             socketService.off('match-found');
             socketService.off('search-error');
             socketService.off('search-cancelled');
+            socketService.off('rejoin-error');
         };
-    }, [isSearching]);
+    }, [isSearching, isRejoining]);
 
     const handleStartSearch = useCallback(() => {
         if (!playerName.trim()) {
@@ -123,10 +308,21 @@ const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({ onStartGame, onExit
                 setSearchMessage(message);
             });
 
-            socketService.onMatchFound(({ gameId, playerColor, opponentName }) => {
+            socketService.onMatchFound(({ gameId, playerColor, opponentName, betAmount }) => {
                 console.log('✅ Match found callback triggered!', { gameId, playerColor, opponentName });
                 setIsSearching(false);
+                setIsRejoining(false);
                 setSearchMessage('');
+                
+                // Save active game info for potential rejoin
+                if (user?._id) {
+                    saveActiveGame({
+                        gameId,
+                        playerColor: playerColor as PlayerColor,
+                        betAmount: betAmount || 0.5,
+                        userId: user._id
+                    });
+                }
                 
                 // Clean up listeners
                 socketService.off('searching');
@@ -165,7 +361,7 @@ const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({ onStartGame, onExit
                         gameId,
                         localPlayerColor: playerColor as PlayerColor,
                         sessionId: finalSocketId
-                    });
+                    }, betAmount);
                     console.log('✅ onStartGame called successfully');
                 } catch (error) {
                     console.error('❌ Error calling onStartGame:', error);
@@ -229,7 +425,7 @@ const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({ onStartGame, onExit
             <div className="bg-slate-700 p-8 rounded-xl shadow-2xl w-full max-w-md">
                 <h2 className="text-2xl font-bold text-center mb-6 text-white">Find an Opponent</h2>
                 
-                {!isSearching ? (
+                {!isSearching && !isRejoining ? (
                     <div className="space-y-6">
                         <div>
                             <label htmlFor="player-name" className="block text-lg font-medium text-slate-300 mb-2">
@@ -251,8 +447,8 @@ const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({ onStartGame, onExit
                             <label className="block text-lg font-medium text-slate-300 mb-3">
                                 Select Bet Amount *
                             </label>
-                            <div className="grid grid-cols-3 gap-3 mb-3">
-                                {[0.5, 1, 2].map((amount) => (
+                            <div className="grid grid-cols-4 gap-3 mb-3">
+                                {[0.25, 0.5, 1, 2].map((amount) => (
                                     <button
                                         key={amount}
                                         type="button"
@@ -302,17 +498,21 @@ const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({ onStartGame, onExit
                     <div className="space-y-6 text-center">
                         <div className="flex flex-col items-center space-y-4">
                             <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-cyan-400"></div>
-                            <p className="text-slate-300 text-lg">{searchMessage || 'Searching for opponent...'}</p>
-                            <p className="text-slate-400 text-sm">Waiting for another player to join</p>
+                            <p className="text-slate-300 text-lg">{searchMessage || (isRejoining ? 'Rejoining your game...' : 'Searching for opponent...')}</p>
+                            <p className="text-slate-400 text-sm">
+                                {isRejoining ? 'Reconnecting to your active match...' : 'Waiting for another player to join'}
+                            </p>
                         </div>
                         
-                        <button
-                            onClick={handleCancelSearch}
-                            className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg transition flex items-center justify-center space-x-2"
-                        >
-                            <StopIcon />
-                            <span>Cancel Search</span>
-                        </button>
+                        {!isRejoining && (
+                            <button
+                                onClick={handleCancelSearch}
+                                className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg transition flex items-center justify-center space-x-2"
+                            >
+                                <StopIcon />
+                                <span>Cancel Search</span>
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -329,5 +529,8 @@ const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({ onStartGame, onExit
         </div>
     );
 };
+
+// Export clear function for use in other components
+export { clearActiveGame, getActiveGame };
 
 export default MultiplayerLobby;

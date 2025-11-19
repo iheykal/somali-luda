@@ -13,6 +13,11 @@ import User from './models/User.js';
 import Transaction from './models/Transaction.js';
 import MatchRevenue from './models/MatchRevenue.js';
 import AuditLog from './models/AuditLog.js';
+import PasswordReset from './models/PasswordReset.js';
+import EscrowAccount from './models/EscrowAccount.js';
+import Match from './models/Match.js';
+import { Game } from './game/Game.js';
+import { BotController } from './game/BotController.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -353,7 +358,7 @@ const reconcileUserBalance = async (userId) => {
         transactions.forEach(tx => {
             if (tx.type === 'DEPOSIT' || tx.type === 'BET_WON' || tx.type === 'MANUAL_ADJUSTMENT') {
                 calculatedBalance += Math.abs(tx.amount);
-            } else if (tx.type === 'WITHDRAWAL' || tx.type === 'BET_PLACED' || tx.type === 'BET_LOST') {
+            } else if (tx.type === 'WITHDRAWAL' || tx.type === 'BET_LOST') {
                 calculatedBalance -= Math.abs(tx.amount);
             }
         });
@@ -421,12 +426,323 @@ const generateGameId = () => {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 };
 
-// Deduct bet from both players when match starts
-const deductBetsFromPlayers = async (gameId, game) => {
+// Game logic constants (matching client-side)
+const START_POSITIONS = { red: 39, green: 0, yellow: 13, blue: 26 };
+const HOME_ENTRANCES = { red: 37, green: 50, yellow: 11, blue: 24 };
+const HOME_PATH_LENGTH = 5;
+
+// Calculate legal moves for a player (server-side version)
+const calculateLegalMoves = (gameState, diceValue) => {
+  if (!gameState || !gameState.tokens || !gameState.players || !gameState.currentPlayerIndex) {
+    return [];
+  }
+  
+  const { tokens, currentPlayerIndex, players } = gameState;
+  if (!players[currentPlayerIndex]) return [];
+  
+  const currentPlayer = players[currentPlayerIndex];
+  const moves = [];
+
+  for (const token of tokens.filter(t => t.color === currentPlayer.color)) {
+    const currentPos = token.position;
+
+    if (currentPos.type === 'YARD') {
+      if (diceValue === 6) {
+        const startPos = START_POSITIONS[currentPlayer.color];
+        const tokensOnStart = tokens.filter(t => 
+          t.position.type === 'PATH' && 
+          t.position.index === startPos && 
+          t.color === currentPlayer.color
+        );
+        if (tokensOnStart.length < 2) {
+          moves.push({ tokenId: token.id, finalPosition: { type: 'PATH', index: startPos } });
+        }
+      }
+    } else if (currentPos.type === 'PATH') {
+      const homeEntrance = HOME_ENTRANCES[currentPlayer.color];
+      const newPathIndex = currentPos.index + diceValue;
+      
+      const distanceToHomeEntrance = (homeEntrance - currentPos.index + 52) % 52;
+      
+      if (diceValue > distanceToHomeEntrance) {
+        const stepsIntoHome = diceValue - distanceToHomeEntrance - 1;
+        if (stepsIntoHome < HOME_PATH_LENGTH) {
+          moves.push({ tokenId: token.id, finalPosition: { type: 'HOME_PATH', index: stepsIntoHome } });
+        } else if (stepsIntoHome === HOME_PATH_LENGTH) {
+          moves.push({ tokenId: token.id, finalPosition: { type: 'HOME' } });
+        }
+      } else {
+        const finalIndex = (currentPos.index + diceValue) % 52;
+        const tokensAtDest = tokens.filter(t => 
+          t.position.type === 'PATH' && 
+          t.position.index === finalIndex && 
+          t.color === currentPlayer.color
+        );
+        if (tokensAtDest.length < 2) {
+          moves.push({ tokenId: token.id, finalPosition: { type: 'PATH', index: finalIndex } });
+        }
+      }
+    } else if (currentPos.type === 'HOME_PATH') {
+      const newHomeIndex = currentPos.index + diceValue;
+      if (newHomeIndex < HOME_PATH_LENGTH) {
+        moves.push({ tokenId: token.id, finalPosition: { type: 'HOME_PATH', index: newHomeIndex } });
+      } else if (newHomeIndex === HOME_PATH_LENGTH) {
+        moves.push({ tokenId: token.id, finalPosition: { type: 'HOME' } });
+      }
+    }
+  }
+  return moves;
+};
+
+// Execute bot move for disconnected player
+const executeBotMove = (gameId, game) => {
+  if (!game || game.gameEnded) {
+    console.log(`⏭️ Skipping bot move - game ended or null:`, { gameEnded: game?.gameEnded, gameId });
+    return;
+  }
+
+  if (game.botPlaying) {
+    console.log(`⏭️ Skipping bot move - bot already playing in game ${gameId}`);
+    return;
+  }
+
+  if (!game.state || game.state.turnState === 'GAMEOVER') {
+    console.log(`⏭️ Skipping bot move - invalid state:`, { hasState: !!game.state, turnState: game.state?.turnState });
+    return;
+  }
+
+  const currentPlayerIndex = game.state.currentPlayerIndex;
+  const currentPlayer = game.state.players[currentPlayerIndex];
+
+  if (!currentPlayer) {
+    console.log(`⏭️ Skipping bot move - no current player at index ${currentPlayerIndex}`);
+    return;
+  }
+
+  // Use Game class method to check if current player is a bot
+  const isBotTurn = game.isCurrentPlayerBot();
+
+  if (!isBotTurn) {
+    console.log(`⏭️ Skipping bot move - not bot's turn:`, {
+      currentPlayer: currentPlayer.color,
+      player1BotMode: game.player1BotMode,
+      player1Connected: game.player1Connected,
+      player2BotMode: game.player2BotMode,
+      player2Connected: game.player2Connected
+    });
+    return;
+  }
+
+  console.log(`🤖 Executing bot move for ${currentPlayer.color} in game ${gameId}, state: ${game.state.turnState}`);
+
+  // Create bot controller and execute move
+  try {
+    const botController = new BotController(game, io, calculateLegalMoves);
+    botController.executeMove().catch(error => {
+      console.error(`❌ Error in bot executeMove for game ${gameId}:`, error);
+      game.botPlaying = false; // Reset flag on error
+    });
+  } catch (error) {
+    console.error(`❌ Error creating/executing bot controller for game ${gameId}:`, error);
+    game.botPlaying = false; // Reset flag on error
+  }
+};
+
+/*
+// Execute bot move for disconnected player
+const executeBotMove_ORIG = (gameId, game) => {
+  if (!game.state || game.state.turnState === 'GAMEOVER') {
+    return;
+  }
+
+  // Prevent multiple simultaneous bot executions
+  if (game.botPlaying) {
+    console.log(`🤖 Bot already playing in game ${gameId}, skipping`);
+    return;
+  }
+
+  game.botPlaying = true;
+
+  // Determine which player is disconnected and needs bot to play
+    const currentPlayerIndex = game.state.currentPlayerIndex;
+    const currentPlayer = game.state.players[currentPlayerIndex];
+
+    if (!currentPlayer) {
+      game.botPlaying = false;
+      return;
+    }
+
+    let needsBot = false;
+    if (currentPlayer.color === game.player1Color && game.player1BotMode && !game.player1Connected) {
+      needsBot = true;
+    } else if (currentPlayer.color === game.player2Color && game.player2BotMode && !game.player2Connected) {
+      needsBot = true;
+    }
+
+    if (!needsBot) {
+      game.botPlaying = false;
+      return;
+    }
+
+  // If bot needs to roll dice first
+  if (game.state.turnState === 'ROLLING' && game.state.diceValue === null) {
+    console.log(`🤖 Bot (${currentPlayer.color}) rolling dice in game ${gameId}`);
+    const diceRoll = Math.floor(Math.random() * 6) + 1;
+    game.state.diceValue = diceRoll;
+    game.state.turnState = 'MOVING';
+
+    const legalMoves = calculateLegalMoves(game.state, diceRoll);
+    game.state.legalMoves = legalMoves;
+
+
+    io.to(gameId).emit('game-action', {
+      action: { type: 'ROLL_DICE', value: diceRoll },
+      playerId: `bot-${currentPlayer.color}`
+    });
+    io.to(gameId).emit('game-state-update', { state: game.state });
+
+    // Continue with move execution after dice roll
+    setTimeout(() => {
+      game.botPlaying = false; // Reset flag before continuing
+      executeBotMove(gameId, game);
+    }, 1500);
+    return;
+  }
+
+  // If no dice value and not in ROLLING state, something is wrong
+  if (!game.state.diceValue) {
+    console.log(`⚠️ Bot (${currentPlayer.color}) has no dice value but turnState is ${game.state.turnState}`);
+    return;
+  }
+
+  // Calculate legal moves
+  const legalMoves = calculateLegalMoves(game.state, game.state.diceValue);
+
+  if (legalMoves.length === 0) {
+    // No legal moves, move to next turn
+    console.log(`🤖 Bot (${currentPlayer.color}) has no legal moves, ending turn`);
+    const nextPlayerIndex = (currentPlayerIndex + 1) % game.state.players.length;
+    game.state.currentPlayerIndex = nextPlayerIndex;
+    game.state.turnState = 'ROLLING';
+    game.state.diceValue = null;
+    game.state.legalMoves = [];
+    
+    // Broadcast updated state
+    io.to(gameId).emit('game-state-update', { state: game.state });
+    
+    // Schedule next bot move if next player is also a bot
+    setTimeout(() => {
+      const nextPlayer = game.state.players[game.state.currentPlayerIndex];
+      if (nextPlayer) {
+        const isNextBot = (nextPlayer.color === game.player1Color && game.player1BotMode && !game.player1Connected) ||
+                         (nextPlayer.color === game.player2Color && game.player2BotMode && !game.player2Connected);
+
+        if (isNextBot && game.state.turnState === 'ROLLING' && game.state.diceValue === null) {
+          // Bot should roll dice - use executeBotMove to handle it properly
+          console.log(`🤖 Bot (${nextPlayer.color}) turn after no moves - rolling dice`);
+          game.botPlaying = false; // Reset flag before continuing
+          executeBotMove(gameId, game);
+        } else {
+          // No more bot actions
+          game.botPlaying = false;
+        }
+      } else {
+        game.botPlaying = false;
+      }
+    }, 1000);
+    return;
+  }
+
+  // Pick a random legal move (simple bot strategy)
+  // In production, you could use the Gemini API here for smarter moves
+  const chosenMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+  
+  console.log(`🤖 Bot (${currentPlayer.color}) executing move:`, chosenMove);
+
+  // Create action to move token
+  const moveAction = {
+    type: 'MOVE_TOKEN',
+    move: chosenMove
+  };
+
+  // Emit the move action to all players
+  io.to(gameId).emit('game-action', { action: moveAction, playerId: `bot-${currentPlayer.color}` });
+
+  // Update game state (basic move execution)
+  const tokenIndex = game.state.tokens.findIndex(t => t.id === chosenMove.tokenId);
+  if (tokenIndex !== -1) {
+    game.state.tokens[tokenIndex].position = chosenMove.finalPosition;
+    
+    // Check if token captured an opponent token
+    const capturedTokenIndex = game.state.tokens.findIndex(t => 
+      t.color !== currentPlayer.color &&
+      t.position.type === 'PATH' &&
+      t.position.index === (chosenMove.finalPosition.type === 'PATH' ? chosenMove.finalPosition.index : -1) &&
+      t.id !== chosenMove.tokenId
+    );
+
+    if (capturedTokenIndex !== -1) {
+      // Reset captured token to yard
+      const capturedToken = game.state.tokens[capturedTokenIndex];
+      const yardTokensOfColor = game.state.tokens.filter(t => 
+        t.color === capturedToken.color && 
+        t.position.type === 'YARD'
+      );
+      game.state.tokens[capturedTokenIndex].position = { type: 'YARD', index: yardTokensOfColor.length };
+    }
+
+    // Clear legal moves and proceed
+    game.state.legalMoves = [];
+    game.state.turnState = 'ANIMATING';
+
+    // After animation, check for extra turn or move to next player
+    setTimeout(() => {
+      const grantedExtraTurn = chosenMove.finalPosition.type === 'HOME' || capturedTokenIndex !== -1;
+      
+      if (grantedExtraTurn) {
+        game.state.turnState = 'ROLLING';
+        game.state.diceValue = null;
+        game.state.legalMoves = [];
+        console.log(`🤖 Bot (${currentPlayer.color}) gets extra turn`);
+      } else {
+        const nextPlayerIndex = (currentPlayerIndex + 1) % game.state.players.length;
+        game.state.currentPlayerIndex = nextPlayerIndex;
+        game.state.turnState = 'ROLLING';
+        game.state.diceValue = null;
+        game.state.legalMoves = [];
+      }
+
+      // Broadcast updated state first
+      io.to(gameId).emit('game-state-update', { state: game.state });
+
+      // Check immediately if bot should continue playing (extra turn or next player is bot)
+      const nextPlayer = game.state.players[game.state.currentPlayerIndex];
+      if (nextPlayer) {
+        const isNextBot = (nextPlayer.color === game.player1Color && game.player1BotMode && !game.player1Connected) ||
+                         (nextPlayer.color === game.player2Color && game.player2BotMode && !game.player2Connected);
+
+        const shouldContinueBot = (isNextBot || grantedExtraTurn) && game.state.turnState === 'ROLLING' && game.state.diceValue === null;
+
+        if (shouldContinueBot) {
+          console.log(`🤖 Bot continuing immediately - next player ${nextPlayer.color} ${isNextBot ? 'is bot' : 'extra turn'}`);
+          // Small delay to allow state to propagate
+          game.botPlaying = false; // Reset flag before continuing to next bot
+          setTimeout(() => executeBotMove(gameId, game), 500);
+        } else {
+          // No more bot actions, reset flag
+          game.botPlaying = false;
+        }
+      }
+    }, 800);
+};
+*/
+
+// Validate bet amounts for both players (only check balance, don't deduct upfront)
+const validateBetsForPlayers = async (gameId, game) => {
   try {
     const betAmount = game.betAmount || 0.5;
     
-    // Deduct from player 1
+    // Only check balance for player 1 (don't deduct)
     if (game.player1UserId) {
       const user1 = await User.findById(game.player1UserId);
       if (user1) {
@@ -435,27 +751,11 @@ const deductBetsFromPlayers = async (gameId, game) => {
           console.error(`❌ Player 1 (${game.player1UserId}) has insufficient balance: $${balanceBefore} < $${betAmount}`);
           return { success: false, error: 'Player 1 has insufficient balance' };
         }
-        const balanceAfter = balanceBefore - betAmount;
-        user1.balance = balanceAfter;
-        await user1.save();
-
-        // Create BET_PLACED transaction
-        const transaction1 = new Transaction({
-          userId: game.player1UserId,
-          type: 'BET_PLACED',
-          amount: -betAmount,
-          balanceBefore: balanceBefore,
-          balanceAfter: balanceAfter,
-          status: 'completed',
-          description: `Bet placed for match ${gameId}`,
-          gameId: gameId
-        });
-        await transaction1.save();
-        console.log(`💰 Deducted $${betAmount} from player 1 (${game.player1UserId}) for game ${gameId}`);
+        console.log(`✅ Player 1 (${game.player1UserId}) has sufficient balance: $${balanceBefore} >= $${betAmount}`);
       }
     }
 
-    // Deduct from player 2
+    // Only check balance for player 2 (don't deduct)
     if (game.player2UserId) {
       const user2 = await User.findById(game.player2UserId);
       if (user2) {
@@ -464,36 +764,68 @@ const deductBetsFromPlayers = async (gameId, game) => {
           console.error(`❌ Player 2 (${game.player2UserId}) has insufficient balance: $${balanceBefore} < $${betAmount}`);
           return { success: false, error: 'Player 2 has insufficient balance' };
         }
-        const balanceAfter = balanceBefore - betAmount;
-        user2.balance = balanceAfter;
-        await user2.save();
-
-        // Create BET_PLACED transaction
-        const transaction2 = new Transaction({
-          userId: game.player2UserId,
-          type: 'BET_PLACED',
-          amount: -betAmount,
-          balanceBefore: balanceBefore,
-          balanceAfter: balanceAfter,
-          status: 'completed',
-          description: `Bet placed for match ${gameId}`,
-          gameId: gameId
-        });
-        await transaction2.save();
-        console.log(`💰 Deducted $${betAmount} from player 2 (${game.player2UserId}) for game ${gameId}`);
+        console.log(`✅ Player 2 (${game.player2UserId}) has sufficient balance: $${balanceBefore} >= $${betAmount}`);
       }
     }
 
+    // Create Match record for live match tracking
+    const totalBet = betAmount * 2;
+    const match = new Match({
+      gameId: gameId,
+      player1Id: game.player1UserId,
+      player2Id: game.player2UserId,
+      player1Color: game.player1Color,
+      player2Color: game.player2Color,
+      betAmount: betAmount,
+      totalBet: totalBet,
+      status: 'live',
+      startedAt: new Date()
+    });
+    await match.save();
+    console.log(`📝 Created live match record for game ${gameId} (bets will be deducted when game ends)`);
+
     return { success: true };
   } catch (error) {
-    console.error(`❌ Error deducting bets for game ${gameId}:`, error);
+    console.error(`❌ Error validating bets for game ${gameId}:`, error);
     return { success: false, error: error.message };
   }
 };
 
-// Record match revenue when game ends
+// Check and execute bot turns for games with disconnected players
+const checkAndExecuteBotTurns = () => {
+  const now = Date.now();
+
+  for (const [gameId, game] of games.entries()) {
+    // Skip games that are over
+    if (!game.state || game.state.turnState === 'GAMEOVER' || game.gameEnded) {
+      continue;
+    }
+
+    // Update last activity
+    game.lastActivity = now;
+
+    // Use Game class method to check if current player is bot
+    if (game.isCurrentPlayerBot() && !game.botPlaying) {
+      const currentPlayer = game.getCurrentPlayer();
+      console.log(`🤖 Periodic bot check: Bot (${currentPlayer.color}) needs to play in game ${gameId}, state: ${game.state.turnState}`);
+      executeBotMove(gameId, game);
+    }
+  }
+};
+
+// Start periodic bot checking (every 2 seconds for faster response)
+setInterval(checkAndExecuteBotTurns, 2000);
+
+// Record match revenue when game ends (deduct from loser, award to winner)
 const recordMatchRevenue = async (gameId, gameState, game) => {
   try {
+    console.log(`💰 Starting revenue recording for game ${gameId}`, {
+      gameStateWinners: gameState.winners,
+      gameEnded: game.gameEnded,
+      player1UserId: game.player1UserId,
+      player2UserId: game.player2UserId
+    });
+
     // Check if revenue already recorded for this game
     const existingRevenue = await MatchRevenue.findOne({ gameId });
     if (existingRevenue) {
@@ -508,13 +840,15 @@ const recordMatchRevenue = async (gameId, gameState, game) => {
     const commission = totalBet * commissionRate; // Commission amount
 
     // Determine winner and loser user IDs
+    // IMPORTANT: Credit win to original player (userId), not bot
+    // Even if bot was playing, the win goes to the original player's account
     let winnerUserId, loserUserId;
     
     if (game.player1Color === winnerColor) {
-      winnerUserId = game.player1UserId;
+      winnerUserId = game.player1UserId; // Original player, even if bot was playing
       loserUserId = game.player2UserId;
     } else {
-      winnerUserId = game.player2UserId;
+      winnerUserId = game.player2UserId; // Original player, even if bot was playing
       loserUserId = game.player1UserId;
     }
 
@@ -531,15 +865,44 @@ const recordMatchRevenue = async (gameId, gameState, game) => {
       console.error(`❌ Cannot record revenue: Users not found for game ${gameId}`);
       return;
     }
-
+    
     // Calculate winner amount (total bet - commission)
     const winnerAmount = totalBet - commission;
 
-    // Update winner balance
+    // Deduct bet from loser (balance deducted at game end)
+    const loserBalanceBefore = loser.balance || 0;
+    if (loserBalanceBefore < betAmount) {
+      console.error(`❌ Loser (${loserUserId}) has insufficient balance: $${loserBalanceBefore} < $${betAmount}. Cannot deduct bet.`);
+      // Still award winner and record transaction
+    } else {
+      const loserBalanceAfter = loserBalanceBefore - betAmount;
+      loser.balance = loserBalanceAfter;
+      await loser.save();
+
+      // Create BET_LOST transaction for loser
+      const loserTransaction = new Transaction({
+        userId: loserUserId,
+        type: 'BET_LOST',
+        amount: -betAmount,
+        balanceBefore: loserBalanceBefore,
+        balanceAfter: loserBalanceAfter,
+        status: 'completed',
+        description: `Lost $${betAmount} - Played with ${winner.username || 'Unknown Player'}`,
+        gameId: gameId
+      });
+      await loserTransaction.save();
+      console.log(`❌ Deducted $${betAmount} from loser ${loserUserId} in game ${gameId} (balance: $${loserBalanceBefore} → $${loserBalanceAfter})`);
+    }
+
+    // Award winnings to winner
     const winnerBalanceBefore = winner.balance || 0;
     const winnerBalanceAfter = winnerBalanceBefore + winnerAmount;
     winner.balance = winnerBalanceAfter;
     await winner.save();
+
+    // Get opponent usernames for transaction descriptions
+    const winnerUsername = winner.username || 'Unknown Player';
+    const loserUsername = loser.username || 'Unknown Player';
 
     // Create BET_WON transaction for winner
     const winnerTransaction = new Transaction({
@@ -549,25 +912,11 @@ const recordMatchRevenue = async (gameId, gameState, game) => {
       balanceBefore: winnerBalanceBefore,
       balanceAfter: winnerBalanceAfter,
       status: 'completed',
-      description: `Won match ${gameId} with bet of $${betAmount}`,
+      description: `Won $${winnerAmount.toFixed(2)} - Played with ${loserUsername} (bet: $${betAmount})`,
       gameId: gameId
     });
     await winnerTransaction.save();
-    console.log(`✅ Created BET_WON transaction for winner ${winnerUserId} in game ${gameId}: $${winnerAmount}`);
-
-    // Create BET_LOST transaction for loser (already deducted, just record it)
-    const loserTransaction = new Transaction({
-      userId: loserUserId,
-      type: 'BET_LOST',
-      amount: -betAmount,
-      balanceBefore: (loser.balance || 0) + betAmount, // Balance before bet was placed
-      balanceAfter: loser.balance || 0,
-      status: 'completed',
-      description: `Lost match ${gameId} with bet of $${betAmount}`,
-      gameId: gameId
-    });
-    await loserTransaction.save();
-    console.log(`❌ Created BET_LOST transaction for loser ${loserUserId} in game ${gameId}: -$${betAmount}`);
+    console.log(`✅ Awarded $${winnerAmount} to winner ${winnerUserId} in game ${gameId} (balance: $${winnerBalanceBefore} → $${winnerBalanceAfter})`);
 
     // Create match revenue record
     const matchRevenue = new MatchRevenue({
@@ -585,6 +934,22 @@ const recordMatchRevenue = async (gameId, gameState, game) => {
 
     await matchRevenue.save();
     console.log(`💰 Match revenue recorded for game ${gameId}: $${commission.toFixed(2)} commission from $${totalBet.toFixed(2)} total bet (bet: $${betAmount})`);
+
+    // Update Match record to completed
+    const match = await Match.findOne({ gameId });
+    if (match) {
+      match.status = 'completed';
+      match.winnerId = winnerUserId;
+      match.loserId = loserUserId;
+      match.winnerAmount = winnerAmount;
+      match.commission = commission;
+      match.completedAt = new Date();
+      await match.save();
+      console.log(`📝 Updated match record for game ${gameId} to completed`);
+      console.log(`✅ Revenue recording COMPLETED successfully for game ${gameId}`);
+    } else {
+      console.log(`⚠️ No Match record found for game ${gameId} to update`);
+    }
   } catch (error) {
     console.error(`❌ Error recording match revenue for ${gameId}:`, error);
   }
@@ -638,20 +1003,23 @@ const matchPlayers = async () => {
       const shuffledColors = colors.sort(() => Math.random() - 0.5);
       const betAmountNum = parseFloat(betAmount);
       
-      const game = {
-        id: gameId,
-        player1Id: player1.socketId,
-        player1Color: shuffledColors[0],
-        player1UserId: player1.userId,
-        player2Id: player2.socketId,
-        player2Color: shuffledColors[1],
-        player2UserId: player2.userId,
-        betAmount: betAmountNum,
-        state: null,
-        players: [],
-        revenueRecorded: false,
-        betsDeducted: false
-      };
+      // Create Game instance
+      const game = new Game(
+        gameId,
+        {
+          socketId: player1.socketId,
+          userId: player1.userId,
+          color: shuffledColors[0],
+          socket: player1.socket
+        },
+        {
+          socketId: player2.socketId,
+          userId: player2.userId,
+          color: shuffledColors[1],
+          socket: player2.socket
+        },
+        betAmountNum
+      );
       
       // Check if both players have sufficient balance before starting match
       if (player1.userId && player2.userId) {
@@ -677,12 +1045,12 @@ const matchPlayers = async () => {
       
       games.set(gameId, game);
       
-      // Deduct bets from both players
-      const betResult = await deductBetsFromPlayers(gameId, game);
+      // Validate bets for both players (only check balance, don't deduct)
+      const betResult = await validateBetsForPlayers(gameId, game);
       if (!betResult.success) {
-        console.error(`❌ Failed to deduct bets for game ${gameId}:`, betResult.error);
-        player1.socket.emit('search-error', { message: 'Failed to process bet. Please try again.' });
-        player2.socket.emit('search-error', { message: 'Failed to process bet. Please try again.' });
+        console.error(`❌ Failed to validate bets for game ${gameId}:`, betResult.error);
+        player1.socket.emit('search-error', { message: betResult.error || 'Failed to validate bet. Please try again.' });
+        player2.socket.emit('search-error', { message: betResult.error || 'Failed to validate bet. Please try again.' });
         games.delete(gameId);
         // Re-add players to queue
         matchmakingQueue.push(player1);
@@ -690,7 +1058,8 @@ const matchPlayers = async () => {
         continue;
       }
       
-      game.betsDeducted = true;
+      // Note: betsDeducted is false - bets will be deducted when game ends
+      game.betsDeducted = false;
       
       // Both players join the game room
       player1.socket.join(gameId);
@@ -700,12 +1069,14 @@ const matchPlayers = async () => {
       const matchData1 = {
         gameId,
         playerColor: shuffledColors[0],
-        opponentName: player2.playerName || 'Player 2'
+        opponentName: player2.playerName || 'Player 2',
+        betAmount: betAmountNum
       };
       const matchData2 = {
         gameId,
         playerColor: shuffledColors[1],
-        opponentName: player1.playerName || 'Player 1'
+        opponentName: player1.playerName || 'Player 1',
+        betAmount: betAmountNum
       };
       
       console.log(`📤 Sending match-found to player1 (${player1.socketId}):`, matchData1);
@@ -714,9 +1085,45 @@ const matchPlayers = async () => {
       player1.socket.emit('match-found', matchData1);
       player2.socket.emit('match-found', matchData2);
       
+      // Send player status to both players when match is found
+      // Both players are connected at this point
+      const playerStatus = {
+        player1Connected: true,
+        player2Connected: true,
+        player1BotMode: false,
+        player2BotMode: false,
+        player1Color: shuffledColors[0],
+        player2Color: shuffledColors[1]
+      };
+      io.to(gameId).emit('player-status', playerStatus);
+      
       console.log(`✅ Matched players: ${player1.socketId} (${player1.playerName}) and ${player2.socketId} (${player2.playerName}) in game ${gameId} with bet $${betAmountNum}`);
     }
   }
+};
+
+// Helper function to find active game for a user (not completed)
+const findActiveGameForUser = (userId) => {
+  if (!userId) return null;
+  
+  const userIdStr = String(userId);
+  
+  for (const [gameId, game] of games.entries()) {
+    const player1UserIdStr = String(game.player1UserId || '');
+    const player2UserIdStr = String(game.player2UserId || '');
+    const isPlayer1 = player1UserIdStr === userIdStr && player1UserIdStr !== '';
+    const isPlayer2 = player2UserIdStr === userIdStr && player2UserIdStr !== '';
+    
+    if (isPlayer1 || isPlayer2) {
+      // Check if game is still active (not ended - all 4 pawns not home)
+      // A game is active if gameEnded is false
+      if (!game.gameEnded && game.state && game.state.turnState !== 'GAMEOVER') {
+        return { gameId, game, isPlayer1 };
+      }
+    }
+  }
+  
+  return null;
 };
 
 io.on('connection', (socket) => {
@@ -731,11 +1138,79 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Check if player is already in a game
+    // Check if player is already in a game (by socket ID)
     for (const [gameId, game] of games.entries()) {
       if (game.player1Id === socket.id || game.player2Id === socket.id) {
         socket.emit('search-error', { message: 'Already in a game' });
         return;
+      }
+    }
+    
+    // NEW: Check if user has an active game (not completed - all 4 pawns not home)
+    // If yes, automatically rejoin that game instead of creating a new one
+    if (userId) {
+      const activeGame = findActiveGameForUser(userId);
+      if (activeGame) {
+        console.log(`🔄 User ${userId} has an active game ${activeGame.gameId}, auto-rejoining instead of creating new match`);
+        
+        // Use Game class method to handle reconnection
+        activeGame.game.handleReconnect(String(userId), socket);
+        
+        // Get player info for sending match-found event
+        const playerInfo = activeGame.game.getPlayerInfo(String(userId));
+        if (!playerInfo) {
+          console.error(`❌ Could not get player info for user ${userId} in game ${activeGame.gameId}`);
+          socket.emit('search-error', { message: 'Failed to rejoin existing game. Please try again.' });
+          return;
+        }
+
+        // Get opponent name if available
+        let opponentName = 'Opponent';
+        const opponentUserId = playerInfo.isPlayer1 ? activeGame.game.player2UserId : activeGame.game.player1UserId;
+        if (opponentUserId) {
+          try {
+            const opponent = await User.findById(opponentUserId);
+            if (opponent) {
+              opponentName = opponent.username || 'Opponent';
+            }
+          } catch (error) {
+            console.error('Error fetching opponent name:', error);
+          }
+        }
+        
+        // Send match-found event with current game info - this triggers the rejoin success handler
+        console.log(`📤 Auto-rejoining user ${userId} to game ${activeGame.gameId}`);
+        
+        socket.emit('match-found', {
+          gameId: activeGame.gameId,
+          playerColor: playerInfo.color,
+          opponentName: opponentName,
+          betAmount: activeGame.game.betAmount
+        });
+
+        // Send current player status
+        socket.emit('player-status', {
+          player1Connected: activeGame.game.player1Connected,
+          player2Connected: activeGame.game.player2Connected,
+          player1BotMode: activeGame.game.player1BotMode,
+          player2BotMode: activeGame.game.player2BotMode,
+          player1Color: activeGame.game.player1Color,
+          player2Color: activeGame.game.player2Color
+        });
+
+        // Notify other players
+        socket.to(activeGame.gameId).emit('player-reconnected', { playerId: socket.id, userId: String(userId) });
+        io.to(activeGame.gameId).emit('player-status', {
+          player1Connected: activeGame.game.player1Connected,
+          player2Connected: activeGame.game.player2Connected,
+          player1BotMode: activeGame.game.player1BotMode,
+          player2BotMode: activeGame.game.player2BotMode,
+          player1Color: activeGame.game.player1Color,
+          player2Color: activeGame.game.player2Color
+        });
+        
+        console.log(`✅ Auto-rejoin completed for user ${userId} in game ${activeGame.gameId}`);
+        return; // Don't proceed with matchmaking
       }
     }
     
@@ -746,10 +1221,10 @@ io.on('connection', (socket) => {
     }
 
     // Validate bet amount
-    const validBetAmounts = [0.5, 1, 2];
+    const validBetAmounts = [0.25, 0.5, 1, 2];
     const betAmountNum = parseFloat(betAmount) || 0.5;
     if (!validBetAmounts.includes(betAmountNum)) {
-      socket.emit('search-error', { message: 'Invalid bet amount. Must be $0.5, $1, or $2' });
+      socket.emit('search-error', { message: 'Invalid bet amount. Must be $0.25, $0.5, $1, or $2' });
       return;
     }
 
@@ -841,8 +1316,9 @@ io.on('connection', (socket) => {
   socket.on('game-state-update', async ({ gameId, state }) => {
     const game = games.get(gameId);
     if (game) {
-      // Verify player is in this game
-      if (game.player1Id !== socket.id && game.player2Id !== socket.id) {
+      // Verify player is in this game (allow null socket IDs for disconnected players)
+      if (game.player1Id !== socket.id && game.player2Id !== socket.id && 
+          game.player1Id !== null && game.player2Id !== null) {
         console.log(`⚠️ Game state update rejected: Player ${socket.id} not in game ${gameId}`);
         return;
       }
@@ -856,38 +1332,107 @@ io.on('connection', (socket) => {
         revenueRecorded: game.revenueRecorded
       });
       
-      game.state = state;
+      // Ensure betAmount is included in state
+      const betAmount = game.betAmount || 0.5;
+      const stateWithBetAmount = {
+        ...state,
+        betAmount: betAmount
+      };
+      
+      // Store state with betAmount
+      game.state = stateWithBetAmount;
+
+      // Update last activity timestamp
+      game.lastActivity = Date.now();
+
+      // Check if bot needs to play - this runs after every state update
+      const checkAndExecuteBotTurn = () => {
+        if (!game.state || !game.state.gameStarted || game.state.turnState === 'GAMEOVER' || game.gameEnded) {
+          return;
+        }
+
+        // Use Game class method to check if current player is bot
+        if (game.isCurrentPlayerBot() && !game.botPlaying) {
+          const currentPlayer = game.getCurrentPlayer();
+          console.log(`🤖 Bot (${currentPlayer.color}) turn detected in state update. TurnState: ${game.state.turnState}, DiceValue: ${game.state.diceValue}`);
+          
+          // Delay slightly to ensure state is fully updated
+          setTimeout(() => {
+            // Double-check conditions before executing
+            if (game.state && game.state.gameStarted && game.state.turnState !== 'GAMEOVER' && !game.gameEnded) {
+              if (game.isCurrentPlayerBot() && !game.botPlaying) {
+                console.log(`✅ Bot confirmed - executing bot move. TurnState: ${game.state.turnState}`);
+                executeBotMove(gameId, game);
+              }
+            }
+          }, 800);
+        }
+      };
+
+      // Check if bot should play after state update
+      checkAndExecuteBotTurn();
       
       // Debug logging for game state updates
-      if (state.turnState === 'GAMEOVER') {
+      if (stateWithBetAmount.turnState === 'GAMEOVER') {
         console.log(`🎯 GAMEOVER state received for game ${gameId}:`, {
-          turnState: state.turnState,
-          winners: state.winners,
+          turnState: stateWithBetAmount.turnState,
+          winners: stateWithBetAmount.winners,
           revenueRecorded: game.revenueRecorded,
           player1UserId: game.player1UserId,
-          player2UserId: game.player2UserId
+          player2UserId: game.player2UserId,
+          betAmount: stateWithBetAmount.betAmount
         });
       }
       
-      // Check if game is over and record match revenue
-      // Also check if winners array has entries even if turnState isn't GAMEOVER (fallback)
-      const hasWinners = state.winners && state.winners.length > 0;
-      const isGameOver = state.turnState === 'GAMEOVER' || hasWinners;
+      // Update game state (this will check if game should end)
+      game.updateState(stateWithBetAmount);
       
+      // Check if game is over and record match revenue
+      // Game only ends when all 4 pawns are home (checked in Game.checkGameEnd)
+      let hasWinners = stateWithBetAmount.winners && stateWithBetAmount.winners.length > 0;
+      const isGameOver = game.gameEnded || stateWithBetAmount.turnState === 'GAMEOVER' || hasWinners;
+
+      // If game is over but no winners detected, try to determine winner from game state
+      if (isGameOver && !hasWinners && game.state && game.state.tokens && game.state.players) {
+        console.log(`🔍 Game ${gameId} is over but no winners detected - checking tokens...`);
+        // Check if any player has all 4 tokens home
+        for (const player of game.state.players) {
+          const playerTokens = game.state.tokens.filter(t => t.color === player.color);
+          const tokensHome = playerTokens.filter(t => t.position.type === 'HOME');
+          if (tokensHome.length === 4) {
+            console.log(`🏆 Detected winner ${player.color} with all 4 tokens home`);
+            if (!stateWithBetAmount.winners) stateWithBetAmount.winners = [];
+            stateWithBetAmount.winners.push(player.color);
+            hasWinners = true;
+            break;
+          }
+        }
+      }
+
+      // Debug logging for game end detection
+      console.log(`🎯 Game end check for ${gameId}:`, {
+        gameEnded: game.gameEnded,
+        turnState: stateWithBetAmount.turnState,
+        hasWinners: hasWinners,
+        winners: stateWithBetAmount.winners,
+        isGameOver: isGameOver,
+        revenueRecorded: game.revenueRecorded,
+        shouldRecord: isGameOver && hasWinners && !game.revenueRecorded
+      });
+
       if (isGameOver && hasWinners && !game.revenueRecorded) {
         console.log(`💰 Attempting to record revenue for game ${gameId}...`);
-        await recordMatchRevenue(gameId, state, game);
+        await recordMatchRevenue(gameId, stateWithBetAmount, game);
         game.revenueRecorded = true;
         console.log(`✅ Revenue recording completed for game ${gameId}`);
         
         // Get winner amount to send to clients
-        const betAmount = game.betAmount || 0.5;
         const totalBet = betAmount * 2;
         const commission = totalBet * 0.10; // 10%
         const winnerAmount = totalBet - commission;
         
         // Add winner info to state for display
-        const winnerColor = state.winners[0];
+        const winnerColor = stateWithBetAmount.winners[0];
         const winnerInfo = {
           winnerColor: winnerColor,
           winnerAmount: winnerAmount,
@@ -896,7 +1441,7 @@ io.on('connection', (socket) => {
         
         // Broadcast state with winner info
         const stateWithWinnerInfo = {
-          ...state,
+          ...stateWithBetAmount,
           winnerInfo: winnerInfo
         };
         
@@ -905,9 +1450,22 @@ io.on('connection', (socket) => {
         socket.emit('game-state-update', { state: stateWithWinnerInfo });
         console.log(`📊 Game state updated with winner info: $${winnerAmount.toFixed(2)} won by ${winnerColor}`);
       } else {
+        // Clear legalMoves when broadcasting to other players to prevent showing wrong movable indicators
+        const stateForOthers = {
+          ...stateWithBetAmount,
+          legalMoves: [] // Don't show legal moves for other players
+        };
+        
+        // Send state with betAmount to the player who made the move
+        const stateForSender = {
+          ...stateWithBetAmount
+        };
+        
         // Broadcast to other players
-        socket.to(gameId).emit('game-state-update', { state });
-        console.log(`📊 Game state updated and broadcasted for game ${gameId}`);
+        socket.to(gameId).emit('game-state-update', { state: stateForOthers });
+        // Send to sender with full state including legalMoves
+        socket.emit('game-state-update', { state: stateForSender });
+        console.log(`📊 Game state updated and broadcasted for game ${gameId} (betAmount: $${betAmount}, legalMoves cleared for other players)`);
       }
     }
   });
@@ -918,10 +1476,184 @@ io.on('connection', (socket) => {
     if (game && (game.player1Id === socket.id || game.player2Id === socket.id)) {
       // Send current game state to the requesting player
       if (game.state) {
-        socket.emit('game-state-update', { state: game.state });
-        console.log(`🔄 State sync sent to ${socket.id} for game ${gameId}`);
+        // Ensure betAmount is included in synced state
+        const betAmount = game.betAmount || 0.5;
+        const stateWithBetAmount = {
+          ...game.state,
+          betAmount: betAmount
+        };
+        socket.emit('game-state-update', { state: stateWithBetAmount });
+        console.log(`🔄 State sync sent to ${socket.id} for game ${gameId} (betAmount: $${betAmount})`);
       }
     }
+  });
+
+  // Handle rejoin request
+  socket.on('rejoin-game', async ({ userId, gameId }) => {
+    console.log(`🔄 Rejoin request received from ${socket.id}:`, { userId, gameId });
+
+    if (!userId) {
+      console.log('❌ No userId provided in rejoin request');
+      socket.emit('rejoin-error', { message: 'User ID required to rejoin game' });
+      return;
+    }
+
+    // Convert userId to string for consistent comparison (handles ObjectId)
+    const userIdStr = String(userId);
+
+    // Find game by userId
+    let targetGame = null;
+    let foundGameId = gameId;
+
+    console.log(`🔍 Rejoin request from ${socket.id}: userId=${userIdStr}, gameId=${gameId}`);
+    console.log(`📊 Active games count: ${games.size}`);
+    
+    // Log all active games for debugging
+    for (const [gId, g] of games.entries()) {
+      console.log(`  Game ${gId}: player1UserId=${String(g.player1UserId)}, player2UserId=${String(g.player2UserId)}, gameStarted=${g.state?.gameStarted}, turnState=${g.state?.turnState}`);
+    }
+    
+    // Helper function to compare userIds (handles ObjectId and string)
+    const compareUserIds = (id1, id2) => {
+      return String(id1) === String(id2);
+    };
+    
+    if (gameId) {
+      targetGame = games.get(gameId);
+      if (targetGame) {
+        // Verify user belongs to this game
+        const isPlayer1 = compareUserIds(targetGame.player1UserId, userIdStr);
+        const isPlayer2 = compareUserIds(targetGame.player2UserId, userIdStr);
+        
+        if (!isPlayer1 && !isPlayer2) {
+          console.log(`❌ User ${userIdStr} not authorized for game ${gameId}`);
+          console.log(`   Game has player1UserId=${String(targetGame.player1UserId)}, player2UserId=${String(targetGame.player2UserId)}`);
+          targetGame = null;
+        } else {
+          foundGameId = gameId;
+          console.log(`✅ User ${userIdStr} authorized for game ${gameId}`);
+        }
+      } else {
+        console.log(`❌ Game ${gameId} not found in active games`);
+      }
+    }
+    
+    // If gameId not provided or game not found, search by userId
+    if (!targetGame) {
+      console.log(`🔍 Searching for game by userId: ${userIdStr}`);
+      for (const [gId, g] of games.entries()) {
+        const isPlayer1 = compareUserIds(g.player1UserId, userIdStr);
+        const isPlayer2 = compareUserIds(g.player2UserId, userIdStr);
+        
+        if (isPlayer1 || isPlayer2) {
+          targetGame = g;
+          foundGameId = gId;
+          console.log(`✅ Found game ${gId} for user ${userIdStr} (${isPlayer1 ? 'player1' : 'player2'})`);
+          break;
+        }
+      }
+    }
+
+    if (!targetGame) {
+      console.log(`❌ No active game found for user ${userIdStr}`);
+      console.log(`   Available games: ${Array.from(games.keys()).join(', ')}`);
+      console.log(`   Searched gameId: ${gameId}`);
+      socket.emit('rejoin-error', { message: 'No active game found to rejoin. The game may have ended or the server was restarted.' });
+      return;
+    }
+
+    console.log(`✅ Found game ${foundGameId} for user ${userIdStr}`);
+    
+    // Check if game is over
+    if (targetGame.state && targetGame.state.turnState === 'GAMEOVER') {
+      console.log(`❌ Game ${foundGameId} has ended`);
+      socket.emit('rejoin-error', { message: 'This game has already ended' });
+      return;
+    }
+
+    // Use Game class method to handle reconnection
+    targetGame.handleReconnect(userIdStr, socket);
+
+    // After reconnection, check if both players are now connected
+    // If so, ensure bot operations are cancelled and game can continue
+    if (targetGame.player1Connected && targetGame.player2Connected) {
+      console.log(`🎉 Both players reconnected in game ${foundGameId} - ensuring smooth continuation`);
+
+      // Cancel any remaining bot operations
+      targetGame.botPlaying = false;
+      if (targetGame.botMoveTimer) {
+        clearTimeout(targetGame.botMoveTimer);
+        targetGame.botMoveTimer = null;
+      }
+
+      // Ensure both players are out of bot mode
+      targetGame.player1BotMode = false;
+      targetGame.player2BotMode = false;
+    }
+
+    // Get player info for sending match-found event
+    const playerInfo = targetGame.getPlayerInfo(userIdStr);
+    if (!playerInfo) {
+      console.error(`❌ Could not get player info for user ${userIdStr} in game ${foundGameId}`);
+      socket.emit('rejoin-error', { message: 'Failed to get player information' });
+      return;
+    }
+
+    // Get opponent name if available
+    let opponentName = 'Opponent';
+    const opponentUserId = playerInfo.isPlayer1 ? targetGame.player2UserId : targetGame.player1UserId;
+    if (opponentUserId) {
+      try {
+        const opponent = await User.findById(opponentUserId);
+        if (opponent) {
+          opponentName = opponent.username || 'Opponent';
+        }
+      } catch (error) {
+        console.error('Error fetching opponent name:', error);
+      }
+    }
+    
+    // Send match-found event with current game info - CRITICAL: This triggers the rejoin success handler
+    console.log(`📤 Sending match-found to reconnected player ${socket.id}:`, {
+      gameId: foundGameId,
+      playerColor: playerInfo.color,
+      opponentName,
+      betAmount: targetGame.betAmount
+    });
+    
+    socket.emit('match-found', {
+      gameId: foundGameId,
+      playerColor: playerInfo.color,
+      opponentName: opponentName,
+      betAmount: targetGame.betAmount
+    });
+
+    // Send current player status
+    socket.emit('player-status', {
+      player1Connected: targetGame.player1Connected,
+      player2Connected: targetGame.player2Connected,
+      player1BotMode: targetGame.player1BotMode,
+      player2BotMode: targetGame.player2BotMode,
+      player1Color: targetGame.player1Color,
+      player2Color: targetGame.player2Color
+    });
+
+    // Notify other players (include color so client can identify if it's opponent)
+    socket.to(foundGameId).emit('player-reconnected', { 
+      playerId: socket.id, 
+      userId: userIdStr,
+      color: playerInfo.color
+    });
+    io.to(foundGameId).emit('player-status', {
+      player1Connected: targetGame.player1Connected,
+      player2Connected: targetGame.player2Connected,
+      player1BotMode: targetGame.player1BotMode,
+      player2BotMode: targetGame.player2BotMode,
+      player1Color: targetGame.player1Color,
+      player2Color: targetGame.player2Color
+    });
+    
+    console.log(`✅ Rejoin completed for user ${userIdStr} in game ${foundGameId}`);
   });
 
   // Handle disconnection
@@ -935,12 +1667,37 @@ io.on('connection', (socket) => {
       console.log(`Player ${socket.id} removed from queue. Queue size: ${matchmakingQueue.length}`);
     }
     
-    // Clean up games when player disconnects
+    // Handle player disconnection in active games
     for (const [gameId, game] of games.entries()) {
       if (game.player1Id === socket.id || game.player2Id === socket.id) {
-        io.to(gameId).emit('player-disconnected', { playerId: socket.id });
-        games.delete(gameId);
-        console.log(`Game ${gameId} deleted due to player disconnect`);
+        // Use Game class method to handle disconnection
+        game.handleDisconnect(socket.id);
+        
+        // Emit player status update
+        io.to(gameId).emit('player-status', {
+          player1Connected: game.player1Connected,
+          player2Connected: game.player2Connected,
+          player1BotMode: game.player1BotMode,
+          player2BotMode: game.player2BotMode,
+          player1Color: game.player1Color,
+          player2Color: game.player2Color
+        });
+
+        // Check if bot needs to play (triggered on disconnect)
+        if (game.state && game.state.gameStarted && !game.gameEnded) {
+          const currentPlayer = game.getCurrentPlayer();
+          
+          if (currentPlayer && game.isCurrentPlayerBot()) {
+            // It's the disconnected player's turn - bot should play immediately
+            console.log(`🤖 Player disconnected during their turn, bot taking over immediately`);
+            setTimeout(() => {
+              executeBotMove(gameId, game);
+            }, 1000);
+          } else {
+            // Not the disconnected player's turn - bot will play when turn comes to them
+            console.log(`🤖 Player disconnected but not their turn. Bot will play when turn comes.`);
+          }
+        }
       }
     }
   });
@@ -1090,6 +1847,71 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     }
 });
 
+// Reset password with phone and reset code (public route)
+app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
+    try {
+        const { phone, resetCode, newPassword } = req.body;
+
+        // Validation
+        if (!phone || !resetCode || !newPassword) {
+            return res.status(400).json({ error: 'Phone number, reset code, and new password are required' });
+        }
+
+        if (newPassword.trim().length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+        }
+
+        // Find user by phone
+        const user = await User.findOne({ phone });
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Find valid reset code
+        const passwordReset = await PasswordReset.findOne({
+            userId: user._id,
+            phone: phone,
+            resetCode: resetCode,
+            used: false,
+            expiresAt: { $gt: new Date() }
+        });
+
+        if (!passwordReset) {
+            await auditLog('SUSPICIOUS_ACTIVITY', req, {
+                action: 'INVALID_PASSWORD_RESET_CODE',
+                phone: phone,
+                severity: 'medium'
+            });
+            return res.status(400).json({ error: 'Invalid or expired reset code' });
+        }
+
+        // Update password (will be hashed by pre-save hook)
+        user.password = newPassword;
+        await user.save();
+
+        // Mark reset code as used
+        passwordReset.used = true;
+        await passwordReset.save();
+
+        // Audit log
+        await auditLog('PASSWORD_RESET_COMPLETED', req, {
+            userId: user._id,
+            username: user.username,
+            phone: user.phone,
+            resetCodeId: passwordReset._id,
+            severity: 'high'
+        });
+
+        res.json({
+            success: true,
+            message: 'Password reset successfully. You can now login with your new password.'
+        });
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ error: 'Failed to reset password. Please try again.' });
+    }
+});
+
 // Get current user profile
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
     try {
@@ -1118,12 +1940,86 @@ app.get('/api/auth/balance', authenticateToken, async (req, res) => {
     }
 });
 
+// Get active games for a user
+app.get('/api/auth/active-games', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId || req.user._id;
+    const userIdStr = String(userId);
+    
+    console.log(`🔍 Fetching active games for user ${userIdStr}`);
+    console.log(`📊 Total games in memory: ${games.size}`);
+    
+    const activeGames = [];
+    
+    // Log all games for debugging
+    for (const [gameId, game] of games.entries()) {
+      console.log(`  Game ${gameId}: player1UserId=${String(game.player1UserId)}, player2UserId=${String(game.player2UserId)}, turnState=${game.state?.turnState || 'null'}`);
+    }
+    
+    // Search through all active games
+    for (const [gameId, game] of games.entries()) {
+      const player1UserIdStr = String(game.player1UserId || '');
+      const player2UserIdStr = String(game.player2UserId || '');
+      const isPlayer1 = player1UserIdStr === userIdStr && player1UserIdStr !== '';
+      const isPlayer2 = player2UserIdStr === userIdStr && player2UserIdStr !== '';
+      
+      if (isPlayer1 || isPlayer2) {
+        // Check if game is still active (not ended)
+        const isActive = !game.state || game.state.turnState !== 'GAMEOVER';
+        
+        if (isActive) {
+          console.log(`✅ Found active game ${gameId} for user ${userIdStr} (${isPlayer1 ? 'player1' : 'player2'})`);
+          
+          // Get opponent info
+          let opponentId = null;
+          let opponentName = 'Opponent';
+          if (isPlayer1 && game.player2UserId) {
+            opponentId = game.player2UserId;
+          } else if (isPlayer2 && game.player1UserId) {
+            opponentId = game.player1UserId;
+          }
+          
+          if (opponentId) {
+            try {
+              const opponent = await User.findById(opponentId).select('username phone');
+              if (opponent) {
+                opponentName = opponent.username || opponent.phone || 'Opponent';
+              }
+            } catch (error) {
+              console.error('Error fetching opponent name:', error);
+            }
+          }
+          
+          activeGames.push({
+            gameId,
+            playerColor: isPlayer1 ? game.player1Color : game.player2Color,
+            opponentName,
+            betAmount: game.betAmount || 0.5,
+            gameStarted: game.state?.gameStarted || false,
+            turnState: game.state?.turnState || 'WAITING',
+            playerConnected: isPlayer1 ? (game.player1Connected !== false) : (game.player2Connected !== false),
+            playerBotMode: isPlayer1 ? game.player1BotMode : game.player2BotMode
+          });
+        } else {
+          console.log(`⏭️  Skipping ended game ${gameId} for user ${userIdStr}`);
+        }
+      }
+    }
+    
+    console.log(`📤 Returning ${activeGames.length} active games for user ${userIdStr}`);
+    res.json({ activeGames });
+  } catch (error) {
+    console.error('Active games fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch active games' });
+  }
+});
+
 // ===== WALLET ROUTES =====
 
 // Deposit money
 app.post('/api/wallet/deposit', walletLimiter, authenticateToken, async (req, res) => {
     try {
-        const { amount, paymentReference, paymentGateway } = req.body;
+        const { amount, phoneNumber } = req.body;
 
         // Security: Enhanced validation
         const amountValidation = validateAmount(amount, 1, 100000);
@@ -1183,9 +2079,10 @@ app.post('/api/wallet/deposit', walletLimiter, authenticateToken, async (req, re
             balanceBefore: balanceBefore,
             balanceAfter: balanceAfter,
             status: 'pending', // Requires admin approval
-            description: `Deposit request of $${amount}`,
-            paymentReference: paymentReference || null,
-            paymentGateway: paymentGateway || 'manual'
+            description: `Deposit request of $${amount}${phoneNumber ? ` from ${phoneNumber}` : ''}`,
+            depositDetails: {
+                phoneNumber: phoneNumber || null
+            }
         });
 
         await transaction.save();
@@ -1351,6 +2248,214 @@ app.get('/api/wallet/transactions', walletLimiter, authenticateToken, async (req
     } catch (error) {
         console.error('Get transactions error:', error);
         res.status(500).json({ error: 'Failed to fetch transactions' });
+    }
+});
+
+// ===== GAME HISTORY ENDPOINTS =====
+
+// Get user game history and statistics
+app.get('/api/games/history', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { limit = 20, skip = 0 } = req.query;
+
+        // Get completed matches for this user
+        const matches = await Match.find({
+            $or: [
+                { player1Id: userId },
+                { player2Id: userId }
+            ],
+            status: 'completed'
+        })
+        .populate('player1Id', 'username')
+        .populate('player2Id', 'username')
+        .populate('winnerId', 'username')
+        .sort({ completedAt: -1 })
+        .limit(parseInt(limit))
+        .skip(parseInt(skip))
+        .select('-__v');
+
+        // Get total count for pagination
+        const totalMatches = await Match.countDocuments({
+            $or: [
+                { player1Id: userId },
+                { player2Id: userId }
+            ],
+            status: 'completed'
+        });
+
+        // Calculate statistics
+        let totalWins = 0;
+        let totalLosses = 0;
+        let totalWonAmount = 0;
+        let totalLostAmount = 0;
+        let totalCommission = 0;
+
+        const gamesWithResults = matches.map(match => {
+            const isWinner = match.winnerId && match.winnerId._id.toString() === userId.toString();
+            const isLoser = match.loserId && match.loserId._id.toString() === userId.toString();
+
+            let result = 'unknown';
+            let amount = 0;
+
+            if (isWinner) {
+                result = 'win';
+                amount = match.winnerAmount || 0;
+                totalWins++;
+                totalWonAmount += amount;
+            } else if (isLoser) {
+                result = 'loss';
+                amount = -(match.betAmount || 0); // Lost the bet amount
+                totalLosses++;
+                totalLostAmount += Math.abs(amount);
+            }
+
+            totalCommission += match.commission || 0;
+
+            return {
+                gameId: match.gameId,
+                opponent: match.player1Id._id.toString() === userId.toString()
+                    ? match.player2Id.username
+                    : match.player1Id.username,
+                betAmount: match.betAmount,
+                result: result,
+                amount: amount,
+                commission: match.commission || 0,
+                completedAt: match.completedAt,
+                winnerColor: match.player1Id._id.toString() === match.winnerId?._id?.toString()
+                    ? match.player1Color
+                    : match.player2Color
+            };
+        });
+
+        const stats = {
+            totalGames: totalMatches,
+            wins: totalWins,
+            losses: totalLosses,
+            winRate: totalMatches > 0 ? ((totalWins / totalMatches) * 100).toFixed(1) : 0,
+            totalWon: totalWonAmount,
+            totalLost: totalLostAmount,
+            netProfit: totalWonAmount - totalLostAmount,
+            totalCommissionPaid: totalCommission
+        };
+
+        res.json({
+            success: true,
+            games: gamesWithResults,
+            stats: stats,
+            pagination: {
+                total: totalMatches,
+                limit: parseInt(limit),
+                skip: parseInt(skip),
+                hasMore: (parseInt(skip) + parseInt(limit)) < totalMatches
+            }
+        });
+
+    } catch (error) {
+        console.error('Get game history error:', error);
+        res.status(500).json({ error: 'Failed to fetch game history' });
+    }
+});
+
+// Get user game statistics summary
+app.get('/api/games/stats', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user._id;
+
+        // Get all completed matches for this user
+        const matches = await Match.find({
+            $or: [
+                { player1Id: userId },
+                { player2Id: userId }
+            ],
+            status: 'completed'
+        })
+        .select('winnerId loserId betAmount winnerAmount commission');
+
+        // Calculate comprehensive statistics
+        let totalGames = 0;
+        let totalWins = 0;
+        let totalLosses = 0;
+        let totalWonAmount = 0;
+        let totalLostAmount = 0;
+        let totalCommission = 0;
+        let totalBetsPlaced = 0;
+
+        // Track wins/losses by bet amount
+        const betAmountStats = {};
+        const winLossByAmount = {};
+
+        matches.forEach(match => {
+            totalGames++;
+            totalBetsPlaced += match.betAmount;
+            totalCommission += match.commission || 0;
+
+            const isWinner = match.winnerId && match.winnerId.toString() === userId.toString();
+            const isLoser = match.loserId && match.loserId.toString() === userId.toString();
+
+            // Initialize bet amount tracking
+            const betKey = match.betAmount.toString();
+            if (!betAmountStats[betKey]) {
+                betAmountStats[betKey] = { games: 0, wins: 0, losses: 0 };
+            }
+            if (!winLossByAmount[betKey]) {
+                winLossByAmount[betKey] = { won: 0, lost: 0 };
+            }
+
+            betAmountStats[betKey].games++;
+
+            if (isWinner) {
+                totalWins++;
+                totalWonAmount += match.winnerAmount || 0;
+                winLossByAmount[betKey].won += match.winnerAmount || 0;
+                betAmountStats[betKey].wins++;
+            } else if (isLoser) {
+                totalLosses++;
+                totalLostAmount += match.betAmount;
+                winLossByAmount[betKey].lost += match.betAmount;
+                betAmountStats[betKey].losses++;
+            }
+        });
+
+        const winRate = totalGames > 0 ? ((totalWins / totalGames) * 100) : 0;
+        const netProfit = totalWonAmount - totalLostAmount;
+        const avgBetAmount = totalGames > 0 ? (totalBetsPlaced / totalGames) : 0;
+        const avgWinAmount = totalWins > 0 ? (totalWonAmount / totalWins) : 0;
+
+        res.json({
+            success: true,
+            stats: {
+                totalGames: totalGames,
+                wins: totalWins,
+                losses: totalLosses,
+                draws: 0, // Ludo doesn't have draws
+                winRate: winRate.toFixed(1),
+                totalWon: totalWonAmount.toFixed(2),
+                totalLost: totalLostAmount.toFixed(2),
+                netProfit: netProfit.toFixed(2),
+                totalCommissionPaid: totalCommission.toFixed(2),
+                totalBetsPlaced: totalBetsPlaced.toFixed(2),
+                avgBetAmount: avgBetAmount.toFixed(2),
+                avgWinAmount: avgWinAmount.toFixed(2),
+                profitMargin: totalBetsPlaced > 0 ? ((netProfit / totalBetsPlaced) * 100).toFixed(1) : 0
+            },
+            betAmountBreakdown: Object.keys(betAmountStats).map(betAmount => ({
+                betAmount: parseFloat(betAmount),
+                games: betAmountStats[betAmount].games,
+                wins: betAmountStats[betAmount].wins,
+                losses: betAmountStats[betAmount].losses,
+                winRate: betAmountStats[betAmount].games > 0
+                    ? ((betAmountStats[betAmount].wins / betAmountStats[betAmount].games) * 100).toFixed(1)
+                    : 0,
+                totalWon: winLossByAmount[betAmount]?.won || 0,
+                totalLost: winLossByAmount[betAmount]?.lost || 0,
+                netProfit: (winLossByAmount[betAmount]?.won || 0) - (winLossByAmount[betAmount]?.lost || 0)
+            }))
+        });
+
+    } catch (error) {
+        console.error('Get game stats error:', error);
+        res.status(500).json({ error: 'Failed to fetch game statistics' });
     }
 });
 
@@ -1653,7 +2758,7 @@ app.get('/api/admin/users', adminLimiter, authenticateToken, async (req, res) =>
                     }
                 ]);
 
-                // Calculate net profit: BET_WON - BET_LOST - BET_PLACED
+                // Calculate net profit: BET_WON - BET_LOST (bets only deducted when lost)
                 let totalWon = 0;
                 let totalLost = 0;
                 let totalPlaced = 0;
@@ -1664,7 +2769,7 @@ app.get('/api/admin/users', adminLimiter, authenticateToken, async (req, res) =>
                     if (t._id === 'BET_PLACED') totalPlaced = Math.abs(t.total);
                 });
 
-                const netProfit = totalWon - totalLost - totalPlaced;
+                const netProfit = totalWon - totalLost;
 
                 return {
                     ...user.toObject(),
@@ -1786,6 +2891,98 @@ app.get('/api/admin/users/:userId/transactions', authenticateToken, async (req, 
     } catch (error) {
         console.error('Get user transactions error:', error);
         res.status(500).json({ error: 'Failed to fetch user transactions' });
+    }
+});
+
+// Generate password reset code (Admin/SuperAdmin only)
+app.post('/api/admin/users/:userId/reset-password', adminLimiter, authenticateToken, async (req, res) => {
+    try {
+        // Check if user is admin or super admin
+        if (!req.user.isAdmin && !req.user.isSuperAdmin) {
+            await auditLog('SUSPICIOUS_ACTIVITY', req, {
+                action: 'UNAUTHORIZED_ADMIN_ACCESS',
+                endpoint: '/api/admin/users/reset-password',
+                severity: 'high'
+            });
+            return res.status(403).json({ error: 'Admin access required' });
+        }
+
+        const { userId } = req.params;
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Prevent admins from resetting other admin/superadmin passwords (only superadmins can)
+        if ((user.isAdmin || user.isSuperAdmin) && !req.user.isSuperAdmin) {
+            return res.status(403).json({ error: 'Only superadmins can reset admin passwords' });
+        }
+
+        // Check if there's an existing valid (unused and not expired) reset code for this user
+        const existingReset = await PasswordReset.findOne({
+            userId: user._id,
+            used: false,
+            expiresAt: { $gt: new Date() } // Not expired
+        }).sort({ createdAt: -1 }); // Get the most recent one
+
+        let passwordReset;
+        let resetCode;
+
+        if (existingReset) {
+            // Reuse existing valid reset code
+            passwordReset = existingReset;
+            resetCode = existingReset.resetCode;
+            
+            // Audit log for code reuse
+            await auditLog('PASSWORD_RESET_CODE_REUSED', req, {
+                targetUserId: user._id,
+                targetUsername: user.username,
+                targetPhone: user.phone,
+                resetCode: resetCode,
+                resetBy: req.user.username,
+                resetByUserId: req.user._id,
+                existingCodeId: existingReset._id,
+                expiresAt: existingReset.expiresAt,
+                severity: 'medium'
+            });
+        } else {
+            // Generate a new 6-digit reset code
+            resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+            
+            // Create password reset record
+            passwordReset = new PasswordReset({
+                userId: user._id,
+                phone: user.phone,
+                resetCode: resetCode,
+                expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000), // 12 hours
+                createdBy: req.user._id
+            });
+
+            await passwordReset.save();
+
+            // Audit log for new code generation
+            await auditLog('PASSWORD_RESET_CODE_GENERATED', req, {
+                targetUserId: user._id,
+                targetUsername: user.username,
+                targetPhone: user.phone,
+                resetCode: resetCode,
+                resetBy: req.user.username,
+                resetByUserId: req.user._id,
+                severity: 'high'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: `Password reset code generated for user ${user.username} (${user.phone})`,
+            resetCode: resetCode,
+            phone: user.phone,
+            expiresAt: passwordReset.expiresAt
+        });
+    } catch (error) {
+        console.error('Generate reset code error:', error);
+        res.status(500).json({ error: 'Failed to generate reset code' });
     }
 });
 
@@ -1995,25 +3192,174 @@ app.get('/api/admin/stats', adminLimiter, authenticateToken, async (req, res) =>
                 $group: {
                     _id: null,
                     totalRevenue: { $sum: '$commission' },
-                    totalBet: { $sum: '$totalBet' }
+                    totalBet: { $sum: '$totalBet' },
+                    avgBet: { $avg: '$betAmount' }
                 }
             }
         ]);
 
         const totalRevenue = revenueData.length > 0 ? revenueData[0].totalRevenue : 0;
         const totalBet = revenueData.length > 0 ? revenueData[0].totalBet : 0;
+        const averageBet = revenueData.length > 0 ? (revenueData[0].avgBet || 0) : 0;
+
+        // Get escrow account info
+        const escrowAccount = await EscrowAccount.getEscrowAccount();
 
         res.json({
             success: true,
             totalGames: totalGames,
             totalRevenue: totalRevenue,
             totalBet: totalBet,
+            averageBet: averageBet,
             commissionRate: 0.10, // 10%
-            totalCommission: totalRevenue
+            totalCommission: totalRevenue,
+            escrowBalance: escrowAccount.balance,
+            escrowTotalDeposited: escrowAccount.totalDeposited,
+            escrowTotalReleased: escrowAccount.totalReleased,
+            escrowTotalCommission: escrowAccount.totalCommission
         });
     } catch (error) {
         console.error('Get game stats error:', error);
         res.status(500).json({ error: 'Failed to fetch game statistics' });
+    }
+});
+
+// Get live matches (admin only)
+app.get('/api/admin/matches/live', adminLimiter, authenticateToken, async (req, res) => {
+    try {
+        // Check if user is admin or super admin
+        if (!req.user.isAdmin && !req.user.isSuperAdmin) {
+            return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+        }
+
+        const liveMatches = await Match.find({ status: 'live' })
+            .populate('player1Id', 'username phone')
+            .populate('player2Id', 'username phone')
+            .sort({ startedAt: -1 });
+
+        const matches = liveMatches.map(match => ({
+            gameId: match.gameId,
+            player1: {
+                username: match.player1Id?.username || 'Unknown',
+                phone: match.player1Id?.phone || 'N/A',
+                color: match.player1Color
+            },
+            player2: {
+                username: match.player2Id?.username || 'Unknown',
+                phone: match.player2Id?.phone || 'N/A',
+                color: match.player2Color
+            },
+            betAmount: match.betAmount,
+            totalBet: match.totalBet,
+            startedAt: match.startedAt
+        }));
+
+        res.json({
+            success: true,
+            matches: matches,
+            count: matches.length
+        });
+    } catch (error) {
+        console.error('Get live matches error:', error);
+        res.status(500).json({ error: 'Failed to fetch live matches' });
+    }
+});
+
+// Get last 24 hours matches (admin only)
+app.get('/api/admin/matches/last24hours', adminLimiter, authenticateToken, async (req, res) => {
+    try {
+        // Check if user is admin or super admin
+        if (!req.user.isAdmin && !req.user.isSuperAdmin) {
+            return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+        }
+
+        const twentyFourHoursAgo = new Date();
+        twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+
+        const matches = await Match.find({
+            startedAt: { $gte: twentyFourHoursAgo }
+        })
+            .populate('player1Id', 'username phone')
+            .populate('player2Id', 'username phone')
+            .populate('winnerId', 'username phone')
+            .populate('loserId', 'username phone')
+            .sort({ startedAt: -1 });
+
+        const matchList = matches.map(match => ({
+            gameId: match.gameId,
+            player1: {
+                username: match.player1Id?.username || 'Unknown',
+                phone: match.player1Id?.phone || 'N/A',
+                color: match.player1Color
+            },
+            player2: {
+                username: match.player2Id?.username || 'Unknown',
+                phone: match.player2Id?.phone || 'N/A',
+                color: match.player2Color
+            },
+            betAmount: match.betAmount,
+            totalBet: match.totalBet,
+            status: match.status,
+            winner: match.winnerId ? {
+                username: match.winnerId.username || 'Unknown',
+                phone: match.winnerId.phone || 'N/A'
+            } : null,
+            loser: match.loserId ? {
+                username: match.loserId.username || 'Unknown',
+                phone: match.loserId.phone || 'N/A'
+            } : null,
+            winnerAmount: match.winnerAmount,
+            commission: match.commission,
+            startedAt: match.startedAt,
+            completedAt: match.completedAt
+        }));
+
+        // Calculate statistics
+        const totalBetted = matches.reduce((sum, m) => sum + (m.totalBet || 0), 0);
+        const totalCommission = matches.reduce((sum, m) => sum + (m.commission || 0), 0);
+        const averageBet = matches.length > 0 ? totalBetted / (matches.length * 2) : 0; // Average per player bet
+        const liveCount = matches.filter(m => m.status === 'live').length;
+        const completedCount = matches.filter(m => m.status === 'completed').length;
+
+        res.json({
+            success: true,
+            matches: matchList,
+            count: matchList.length,
+            statistics: {
+                totalBetted: totalBetted,
+                totalCommission: totalCommission,
+                averageBet: averageBet,
+                liveCount: liveCount,
+                completedCount: completedCount
+            }
+        });
+    } catch (error) {
+        console.error('Get last 24 hours matches error:', error);
+        res.status(500).json({ error: 'Failed to fetch last 24 hours matches' });
+    }
+});
+
+// Get escrow account info (admin only)
+app.get('/api/admin/escrow', adminLimiter, authenticateToken, async (req, res) => {
+    try {
+        // Check if user is admin or super admin
+        if (!req.user.isAdmin && !req.user.isSuperAdmin) {
+            return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+        }
+
+        const escrowAccount = await EscrowAccount.getEscrowAccount();
+
+        res.json({
+            success: true,
+            balance: escrowAccount.balance,
+            totalDeposited: escrowAccount.totalDeposited,
+            totalReleased: escrowAccount.totalReleased,
+            totalCommission: escrowAccount.totalCommission,
+            updatedAt: escrowAccount.updatedAt
+        });
+    } catch (error) {
+        console.error('Get escrow account error:', error);
+        res.status(500).json({ error: 'Failed to fetch escrow account' });
     }
 });
 
@@ -2231,6 +3577,56 @@ connectDB();
 mongoose.connection.on('disconnected', () => {
   console.log('⚠️  MongoDB disconnected');
 });
+
+// Scheduled job to delete matches older than 24 hours
+const deleteOldMatches = async () => {
+  try {
+    // Check if database is connected
+    if (mongoose.connection.readyState !== 1) {
+      console.log('⏳ Database not connected, skipping match cleanup');
+      return;
+    }
+
+    const twentyFourHoursAgo = new Date();
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+
+    // Find matches older than 24 hours (exclude live matches)
+    const oldMatches = await Match.find({
+      $or: [
+        { completedAt: { $lt: twentyFourHoursAgo } },
+        { startedAt: { $lt: twentyFourHoursAgo }, status: { $ne: 'live' } }
+      ]
+    });
+
+    if (oldMatches.length > 0) {
+      const matchIds = oldMatches.map(m => m.gameId);
+      
+      // Delete from Match collection
+      const matchDeleteResult = await Match.deleteMany({
+        _id: { $in: oldMatches.map(m => m._id) }
+      });
+
+      // Delete from MatchRevenue collection
+      const revenueDeleteResult = await MatchRevenue.deleteMany({
+        gameId: { $in: matchIds }
+      });
+
+      // Delete related transactions
+      const transactionDeleteResult = await Transaction.deleteMany({
+        gameId: { $in: matchIds }
+      });
+
+      console.log(`🗑️  Deleted ${matchDeleteResult.deletedCount} old matches, ${revenueDeleteResult.deletedCount} revenue records, and ${transactionDeleteResult.deletedCount} transactions older than 24 hours`);
+    }
+  } catch (error) {
+    console.error('❌ Error deleting old matches:', error);
+  }
+};
+
+// Run the cleanup job every hour
+setInterval(deleteOldMatches, 60 * 60 * 1000); // Run every hour
+// Also run immediately on startup (after a delay to ensure DB is connected)
+setTimeout(deleteOldMatches, 5 * 60 * 1000); // Run after 5 minutes
 
 mongoose.connection.on('error', (err) => {
   console.error('❌ MongoDB error:', err);
