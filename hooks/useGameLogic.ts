@@ -1031,10 +1031,10 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
             
             moveTimeoutRef.current = setTimeout(() => {
                 setMoveCountdown(null); // Clear countdown when timeout expires
-            }, 12000); // 12 seconds timeout
+
                 const latestState = stateRef.current;
                 const latestPlayer = latestState.players[latestState.currentPlayerIndex];
-                
+
                 // Double-check conditions before auto-moving
                 if (
                     latestState.turnState === 'MOVING' &&
@@ -1046,16 +1046,16 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                     const isStillPlayerTurn = isMultiplayer
                         ? (latestPlayer.color === multiplayerConfig?.localPlayerColor)
                         : (!latestPlayer.isAI);
-                    
+
                     if (isStillPlayerTurn) {
                         const wasDisconnected = !isConnectedRef.current;
-                        
+
                         // Mark bot as playing if player is disconnected
                         if (wasDisconnected) {
                             botPlayingRef.current = true;
                             console.log('🤖 Bot playing for disconnected player');
                         }
-                        
+
                         // Pick a random move from available legal moves
                         const randomMove = latestState.legalMoves[Math.floor(Math.random() * latestState.legalMoves.length)];
                         if (randomMove) {
@@ -1070,7 +1070,7 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                         }
                     }
                 }
-            }, 25000); // Always wait 25 seconds
+            }, 12000); // 12 seconds timeout
         }
 
         return () => {
