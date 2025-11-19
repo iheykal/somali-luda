@@ -48,7 +48,7 @@ git push -u origin main
    NODE_ENV=production
    GEMINI_API_KEY=your_gemini_api_key_here
    VITE_API_URL=/api
-   VITE_SOCKET_URL=https://ludo-252.onrender.com
+   VITE_SOCKET_URL=https://somali-luda-eo83.onrender.com
    VITE_USE_REAL_API=true
    JWT_SECRET=your_jwt_secret_here
    MONGODB_URI=your_mongodb_connection_string
