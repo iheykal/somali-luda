@@ -57,7 +57,7 @@ export default defineConfig(({ mode }) => {
     // Define constants with production defaults as fallback
     // This ensures that even if Render doesn't pass env vars during build, we use correct production values
     const VITE_API_URL = mergedEnv.VITE_API_URL || mergedEnv.API_URL || (mode === 'production' ? '/api' : undefined);
-    const VITE_SOCKET_URL = mergedEnv.VITE_SOCKET_URL || mergedEnv.SOCKET_URL || (mode === 'production' ? 'https://ludo-252.onrender.com' : undefined);
+    const VITE_SOCKET_URL = mergedEnv.VITE_SOCKET_URL || mergedEnv.SOCKET_URL || (mode === 'production' ? 'https://somali-luda-eo83.onrender.com' : undefined);
     const VITE_USE_REAL_API = mergedEnv.VITE_USE_REAL_API || mergedEnv.USE_REAL_API || (mode === 'production' ? 'true' : 'false');
     const GEMINI_API_KEY = mergedEnv.GEMINI_API_KEY;
     
