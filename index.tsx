@@ -2,7 +2,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { audioService } from './services/audioService';
+import { audioService } from './services/audioService.ts';
 
 // Make audio service available in console for testing
 // @ts-ignore

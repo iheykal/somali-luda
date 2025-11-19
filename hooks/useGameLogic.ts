@@ -3,7 +3,7 @@ import type { GameState, Player, PlayerColor, Token, LegalMove, TokenPosition, M
 import { PLAYER_COLORS, START_POSITIONS, HOME_ENTRANCES, HOME_PATH_LENGTH, SAFE_SQUARES } from '../lib/boardLayout';
 import { getAIMove } from '../services/geminiService';
 import { socketService } from '../services/socketService';
-import { audioService } from '../services/audioService';
+import { audioService } from '../services/audioService.ts';
 
 // --- Multiplayer Service (WebSocket communication) ---
 const multiplayerService = {
@@ -44,7 +44,7 @@ const multiplayerService = {
 
 // --- Game Logic ---
 export type Action =
-    | { type: 'START_GAME'; players: Player[]; initialState?: GameState }
+    | { type: 'START_GAME'; players: Player[]; initialState?: GameState; betAmount?: number }
     | { type: 'ROLL_DICE'; value: number }
     | { type: 'SET_LEGAL_MOVES_AND_PROCEED'; moves: LegalMove[] }
     | { type: 'MOVE_TOKEN'; move: LegalMove }
@@ -69,7 +69,11 @@ const reducer = (state: GameState, action: Action): GameState => {
     switch (action.type) {
         case 'START_GAME': {
             if (action.initialState) {
-                return action.initialState;
+                // If initialState is provided, ensure betAmount is included
+                const stateWithBetAmount = action.betAmount !== undefined
+                    ? { ...action.initialState, betAmount: action.betAmount }
+                    : action.initialState;
+                return stateWithBetAmount;
             }
             // Ensure players are always in the same order (red, yellow)
             const sortedPlayers = [...action.players].sort((a, b) => {
@@ -95,10 +99,18 @@ const reducer = (state: GameState, action: Action): GameState => {
                 currentPlayerIndex: 0,
                 turnState: 'ROLLING',
                 message: '',
+                betAmount: action.betAmount,
             };
         }
         
         case 'SET_STATE':
+            // Preserve betAmount if new state doesn't have it but current state does
+            if (!action.state.betAmount && state.betAmount) {
+                return {
+                    ...action.state,
+                    betAmount: state.betAmount
+                };
+            }
             return action.state;
 
         case 'ROLL_DICE': {
@@ -121,7 +133,7 @@ const reducer = (state: GameState, action: Action): GameState => {
                     ...state,
                     legalMoves: [],
                     turnState: 'ANIMATING', // Transition to ANIMATING to prevent immediate rolling
-                    message: `No legal moves. Passing turn.`,
+                    message: '', // Clear message instead of showing "No legal moves"
                  }
             }
             return { ...state, legalMoves: action.moves };
@@ -242,29 +254,28 @@ const reducer = (state: GameState, action: Action): GameState => {
             // Only use _pendingExtraTurn if it's explicitly set (not undefined)
             // This prevents using stale values from previous turns
             const shouldGrantExtraTurn = state._pendingExtraTurn === true;
-            console.log('🔄 ANIMATION_COMPLETE - transitioning to next turn:', {
-                _pendingExtraTurn: state._pendingExtraTurn,
-                shouldGrantExtraTurn,
-                currentPlayerIndex: state.currentPlayerIndex,
-                diceValue: state.diceValue,
-                turnState: state.turnState
-            });
             const nextState = getNextTurnState(state, shouldGrantExtraTurn);
-            console.log('🔄 ANIMATION_COMPLETE - next state:', nextState);
-            return {
+            
+            // If extra turn is granted, ensure we're back to ROLLING state
+            const finalState = {
                 ...state,
                 ...nextState,
                 _pendingExtraTurn: undefined, // Always clear after use
             };
+            
+            // Double-check: if extra turn was granted, we should be back to ROLLING with same player
+            if (shouldGrantExtraTurn && finalState.turnState !== 'ROLLING') {
+                console.warn('⚠️ Extra turn granted but state not ROLLING, fixing...');
+                finalState.turnState = 'ROLLING';
+                finalState.diceValue = null;
+                finalState.legalMoves = [];
+            }
+            
+            return finalState;
         }
 
         case 'NEXT_TURN': {
             const nextState = getNextTurnState(state, action.grantExtraTurn);
-            console.log('🔄 NEXT_TURN - transitioning to next turn:', {
-                grantExtraTurn: action.grantExtraTurn,
-                currentPlayerIndex: state.currentPlayerIndex,
-                nextState
-            });
             return { 
                 ...state, 
                 ...nextState,
@@ -297,13 +308,6 @@ const getNextTurnState = (state: GameState, grantExtraTurn: boolean): Partial<Ga
     }
     
     const nextPlayer = state.players[nextPlayerIndex];
-    console.log('🔄 getNextTurnState:', {
-        currentIndex: state.currentPlayerIndex,
-        nextIndex: nextPlayerIndex,
-        nextPlayerColor: nextPlayer?.color,
-        grantExtraTurn,
-        winners: state.winners
-    });
     
     return {
         currentPlayerIndex: nextPlayerIndex,
@@ -327,22 +331,22 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
         ? state.players[state.currentPlayerIndex]?.color === multiplayerConfig.localPlayerColor
         : true;
     
-    // Debug logging for turn state - this will help us see when state updates
+    // Removed excessive turn state logging for performance
+    
+    // Clear rolling flag when we're ready to roll again (ROLLING state with null dice)
+    // This ensures the flag is cleared after getting an extra turn (e.g., from rolling a 6)
+    // Also clear it when state changes away from rolling or when dice is rolled
     useEffect(() => {
-        if (isMultiplayer && state.gameStarted && state.players.length > 0) {
-            const currentPlayer = state.players[state.currentPlayerIndex];
-            const calculatedIsMyTurn = currentPlayer?.color === multiplayerConfig.localPlayerColor;
-            console.log('🎯 Turn state check:', {
-                currentPlayerIndex: state.currentPlayerIndex,
-                currentPlayerColor: currentPlayer?.color,
-                myColor: multiplayerConfig.localPlayerColor,
-                isMyTurn: calculatedIsMyTurn,
-                turnState: state.turnState,
-                canRoll: state.turnState === 'ROLLING' && calculatedIsMyTurn,
-                players: state.players.map(p => p.color)
-            });
+        // Always clear the flag - it should only be true during the brief moment of processing a roll
+        // The key fix: clear it when we're back to ROLLING with null dice (ready for next roll)
+        if (state.turnState === 'ROLLING' && state.diceValue === null) {
+            isRollingRef.current = false;
         }
-    }, [state.currentPlayerIndex, state.turnState, state.gameStarted, state.players, isMultiplayer, multiplayerConfig?.localPlayerColor]);
+        // Also clear when not in rolling state or when dice has been rolled
+        if (state.turnState !== 'ROLLING' || state.diceValue !== null) {
+            isRollingRef.current = false;
+        }
+    }, [state.turnState, state.diceValue]);
     
     const localDispatchRef = useRef(dispatch);
     localDispatchRef.current = dispatch;
@@ -364,6 +368,7 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
     const moveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const botPlayingRef = useRef<boolean>(false);
     const isConnectedRef = useRef<boolean>(true);
+    const isRollingRef = useRef<boolean>(false); // Prevent multiple simultaneous rolls
     
     // Countdown timer state
     const [diceRollCountdown, setDiceRollCountdown] = useState<number | null>(null);
@@ -445,7 +450,6 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
         // Only manage interval when countdown state changes from active to inactive or vice versa
         if (hasActiveCountdown && !countdownIntervalRef.current) {
             // Start interval when countdown becomes active
-            console.log('⏰ Starting countdown interval', { diceRollCountdown, moveCountdown });
             countdownIntervalRef.current = setInterval(() => {
                 // Use refs to get current values without causing re-renders
                 const currentDiceRoll = diceRollCountdownRef.current;
@@ -454,10 +458,8 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                 if (currentDiceRoll !== null && currentDiceRoll > 0) {
                     const newValue = currentDiceRoll - 1;
                     if (newValue <= 0) {
-                        console.log('⏰ Dice roll countdown reached 0');
                         setDiceRollCountdown(null);
                     } else {
-                        console.log('⏰ Dice roll countdown:', newValue);
                         setDiceRollCountdown(newValue);
                     }
                 }
@@ -465,7 +467,6 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                 if (currentMove !== null && currentMove > 0) {
                     const newValue = currentMove - 1;
                     if (newValue <= 0) {
-                        console.log('⏰ Move countdown reached 0');
                         setMoveCountdown(null);
                     } else {
                         setMoveCountdown(newValue);
@@ -474,7 +475,6 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
             }, 1000);
         } else if (!hasActiveCountdown && countdownIntervalRef.current) {
             // Stop interval when all countdowns become inactive
-            console.log('⏰ Stopping countdown interval - no active timers');
             clearInterval(countdownIntervalRef.current);
             countdownIntervalRef.current = null;
         }
@@ -515,7 +515,28 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
             } else if (message.type === 'GAME_STATE_UPDATE') {
                 // Received full state update from server (for sync/recovery)
                 console.log('🔄 Received full state update from server, syncing...');
-                localDispatchRef.current({ type: 'SET_STATE', state: message.payload.state });
+                const syncedState = message.payload.state;
+
+                // Apply the state update - but don't interrupt if we're animating
+                const currentState = stateRef.current;
+                if (currentState.turnState === 'ANIMATING' && syncedState.turnState !== 'ANIMATING') {
+                    console.log('⚠️ Ignoring state update during animation', {
+                        currentTurnState: currentState.turnState,
+                        newTurnState: syncedState.turnState
+                    });
+                    // Don't apply the state update if it would interrupt animation
+                    return;
+                }
+
+                localDispatchRef.current({ type: 'SET_STATE', state: syncedState });
+                
+                // Clear rolling flag when state is synced to ensure player can roll if it's their turn
+                // This is especially important after reconnection
+                if (syncedState.turnState === 'ROLLING' && syncedState.diceValue === null) {
+                    setTimeout(() => {
+                        isRollingRef.current = false;
+                    }, 100);
+                }
             }
         };
 
@@ -593,6 +614,12 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
         // Use latest state to prevent race conditions
         const latestState = stateRef.current;
         
+        // Prevent multiple simultaneous rolls
+        if (isRollingRef.current) {
+            console.log('❌ Roll already in progress, ignoring duplicate roll request');
+            return;
+        }
+        
         // Clear dice roll timeout when user manually rolls
         if (diceRollTimeoutRef.current) {
             clearTimeout(diceRollTimeoutRef.current);
@@ -614,31 +641,16 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
             ? currentPlayer?.color === multiplayerConfig?.localPlayerColor
             : (!currentPlayer?.isAI);
         
-        console.log('🎲 handleRollDice called:', { 
-            turnState: latestState.turnState, 
-            isMyTurn: calculatedIsMyTurn, 
-            currentPlayerIndex: latestState.currentPlayerIndex,
-            currentPlayer: currentPlayer?.color,
-            canRoll: latestState.turnState === 'ROLLING' && calculatedIsMyTurn,
-            diceValue: latestState.diceValue // Should be null when rolling
-        });
-        
         // Strict validation: Must be in ROLLING state, must be player's turn, and dice must be null
         if (latestState.turnState !== 'ROLLING' || !calculatedIsMyTurn || latestState.diceValue !== null) {
-            console.log('❌ Cannot roll dice:', { 
-                reason: latestState.turnState !== 'ROLLING' ? 'Not ROLLING state' : 
-                       !calculatedIsMyTurn ? 'Not my turn' : 
-                       latestState.diceValue !== null ? 'Dice already rolled' : 'Unknown',
-                turnState: latestState.turnState,
-                isMyTurn: calculatedIsMyTurn,
-                diceValue: latestState.diceValue
-            });
             return;
         }
+        
+        // Mark as rolling to prevent duplicate rolls
+        isRollingRef.current = true;
 
         const roll = Math.floor(Math.random() * 6) + 1;
         const rollAction: Action = { type: 'ROLL_DICE', value: roll };
-        console.log('🎲 Rolling dice:', roll);
         dispatch(rollAction);
         broadcastAction(rollAction);
         // Play dice roll sound after dispatch (user has already interacted by clicking)
@@ -681,7 +693,6 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
         
         const moves = calculateLegalMoves(stateAfterRoll, roll);
         const movesAction: Action = { type: 'SET_LEGAL_MOVES_AND_PROCEED', moves };
-        console.log('📋 Legal moves calculated:', moves.length, moves.map(m => ({ tokenId: m.tokenId, pos: m.finalPosition })));
         dispatch(movesAction);
         broadcastAction(movesAction);
 
@@ -823,7 +834,7 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
         }
     }, [state.turnState, state.legalMoves, isMyTurn, broadcastAction]);
     
-    const startGame = (players: Player[], initialState?: GameState) => dispatch({ type: 'START_GAME', players, initialState });
+    const startGame = (players: Player[], initialState?: GameState, betAmount?: number) => dispatch({ type: 'START_GAME', players, initialState, betAmount });
 
     const setState = (newState: GameState) => dispatch({ type: 'SET_STATE', state: newState });
 
@@ -853,13 +864,24 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
         
         // Process locally and broadcast if multiplayer
         const nextTurnAction: Action = { type: 'ANIMATION_COMPLETE' };
+        const hasExtraTurn = currentState._pendingExtraTurn === true;
         console.log('✅ Processing ANIMATION_COMPLETE', { 
             isMyTurn: calculatedIsMyTurn, 
             isMultiplayer,
             currentPlayerColor: currentPlayer?.color,
-            _pendingExtraTurn: currentState._pendingExtraTurn
+            _pendingExtraTurn: currentState._pendingExtraTurn,
+            hasExtraTurn,
+            willGrantExtraTurn: hasExtraTurn
         });
         dispatch(nextTurnAction);
+        
+        // If extra turn is granted, clear the rolling flag immediately so player can roll again
+        if (hasExtraTurn) {
+            // Clear the flag after a brief delay to ensure state has updated
+            setTimeout(() => {
+                isRollingRef.current = false;
+            }, 100);
+        }
         
         // Broadcast in multiplayer so the other player receives it
         if (isMultiplayer) {
@@ -868,10 +890,20 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
             setTimeout(() => {
                 // Use stateRef to get the latest state after the reducer has updated it
                 const updatedState = stateRef.current;
-                console.log('📤 Sending state sync after ANIMATION_COMPLETE');
+                // Clear legalMoves when broadcasting to other players to prevent wrong movable indicators
+                const stateForBroadcast = {
+                    ...updatedState,
+                    legalMoves: [] // Don't broadcast legal moves to other players
+                };
+                console.log('📤 Sending state sync after ANIMATION_COMPLETE', {
+                    turnState: stateForBroadcast.turnState,
+                    currentPlayerIndex: stateForBroadcast.currentPlayerIndex,
+                    diceValue: stateForBroadcast.diceValue,
+                    hasExtraTurn: hasExtraTurn
+                });
                 multiplayerService.broadcast(multiplayerConfig.gameId, {
                     type: 'GAME_STATE_UPDATE',
-                    payload: { state: updatedState, sessionId: multiplayerConfig.sessionId }
+                    payload: { state: stateForBroadcast, sessionId: multiplayerConfig.sessionId }
                 }, multiplayerConfig.sessionId);
             }, 500);
         }
@@ -902,22 +934,25 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
             isPlayerTurn &&
             !botPlayingRef.current
         ) {
-            console.log('⏰ Starting 15s timeout for dice roll', {
+            console.log('⏰ Starting 8s timeout for dice roll', {
                 gameStarted: state.gameStarted,
                 turnState: state.turnState,
                 currentPlayer: currentPlayer?.color,
                 isPlayerTurn,
-                botPlaying: botPlayingRef.current
+                botPlaying: botPlayingRef.current,
+                isMultiplayer
             });
-            setDiceRollCountdown(15); // Start countdown at 15 seconds
-            console.log('⏰ Set diceRollCountdown to 15');
+            setDiceRollCountdown(8); // Start countdown at 8 seconds
+            console.log('⏰ Set diceRollCountdown to 8');
             
             diceRollTimeoutRef.current = setTimeout(() => {
                 setDiceRollCountdown(null); // Clear countdown when timeout expires
+            }, 8000); // 8 seconds timeout
                 const latestState = stateRef.current;
                 const latestPlayer = latestState.players[latestState.currentPlayerIndex];
                 
                 // Double-check conditions before auto-rolling
+                // Auto-roll in both single-player and multiplayer modes
                 if (
                     latestState.turnState === 'ROLLING' &&
                     latestState.gameStarted &&
@@ -929,7 +964,7 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                         : (!latestPlayer.isAI);
                     
                     if (isStillPlayerTurn) {
-                        console.log('⏰ Auto-rolling dice after 15s timeout');
+                        console.log('⏰ Auto-rolling dice after 8s timeout');
                         const wasDisconnected = !isConnectedRef.current;
                         
                         // Mark bot as playing if player is disconnected
@@ -946,11 +981,6 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
 
         return () => {
             const latestState = stateRef.current;
-            console.log('⏰ Dice roll timer effect cleanup', {
-                turnState: latestState.turnState,
-                currentPlayerIndex: latestState.currentPlayerIndex,
-                hasTimeout: !!diceRollTimeoutRef.current
-            });
             if (diceRollTimeoutRef.current) {
                 clearTimeout(diceRollTimeoutRef.current);
                 diceRollTimeoutRef.current = null;
@@ -965,10 +995,7 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                               !latestState.gameStarted ||
                               !isStillPlayerTurn;
             if (shouldClear) {
-                console.log('⏰ Clearing diceRollCountdown in cleanup', { shouldClear, turnState: latestState.turnState, isStillPlayerTurn });
                 setDiceRollCountdown(null);
-            } else {
-                console.log('⏰ Keeping diceRollCountdown active', { turnState: latestState.turnState, isStillPlayerTurn });
             }
         };
     }, [state.turnState, state.currentPlayerIndex, state.gameStarted, isMultiplayer, multiplayerConfig?.localPlayerColor]);
@@ -1000,11 +1027,11 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
             isPlayerTurn &&
             !botPlayingRef.current
         ) {
-            console.log('⏰ Starting 25s timeout for move');
-            setMoveCountdown(25); // Start countdown at 25 seconds
+            setMoveCountdown(12); // Start countdown at 12 seconds
             
-            moveTimeoutRef.current = setTimeout(async () => {
+            moveTimeoutRef.current = setTimeout(() => {
                 setMoveCountdown(null); // Clear countdown when timeout expires
+            }, 12000); // 12 seconds timeout
                 const latestState = stateRef.current;
                 const latestPlayer = latestState.players[latestState.currentPlayerIndex];
                 
@@ -1021,7 +1048,6 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                         : (!latestPlayer.isAI);
                     
                     if (isStillPlayerTurn) {
-                        console.log('⏰ Auto-moving after 25s timeout');
                         const wasDisconnected = !isConnectedRef.current;
                         
                         // Mark bot as playing if player is disconnected
@@ -1030,10 +1056,10 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                             console.log('🤖 Bot playing for disconnected player');
                         }
                         
-                        // Use AI to pick the best move
-                        const aiMove = await getAIMove(latestState);
-                        if (aiMove) {
-                            const moveAction: Action = { type: 'MOVE_TOKEN', move: aiMove };
+                        // Pick a random move from available legal moves
+                        const randomMove = latestState.legalMoves[Math.floor(Math.random() * latestState.legalMoves.length)];
+                        if (randomMove) {
+                            const moveAction: Action = { type: 'MOVE_TOKEN', move: randomMove };
                             dispatchRef.current?.(moveAction);
                             broadcastActionRef.current?.(moveAction);
                         } else {
@@ -1062,7 +1088,6 @@ export const useGameLogic = (multiplayerConfig?: MultiplayerConfig) => {
                 moveTimeoutRef.current = null;
             }
             if (shouldClear) {
-                console.log('⏰ Clearing moveCountdown in cleanup');
                 setMoveCountdown(null);
             }
         };
