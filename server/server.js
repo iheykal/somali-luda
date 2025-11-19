@@ -2372,20 +2372,37 @@ if (process.env.NODE_ENV === 'production') {
             }
             
             // CRITICAL: Don't serve index.html for static asset requests
-            // If we get here with a file extension, the file doesn't exist - return 404, not HTML
+            // If we get here with assets or files, return 404, not HTML
+            if (req.path.startsWith('/assets/') || req.path.startsWith('/audio/')) {
+                console.error(`❌ Static asset not found: ${req.path}`);
+                const requestedFile = path.join(absoluteFrontendPath, req.path);
+                console.error(`   Expected at: ${requestedFile}`);
+                console.error(`   Dist folder exists: ${existsSync(absoluteFrontendPath)}`);
+                if (existsSync(absoluteFrontendPath)) {
+                    const assetsPath = path.join(absoluteFrontendPath, 'assets');
+                    console.error(`   Assets folder exists: ${existsSync(assetsPath)}`);
+                    if (existsSync(assetsPath)) {
+                        try {
+                            const files = readdirSync(assetsPath);
+                            console.error(`   Files in assets: ${files.join(', ')}`);
+                        } catch (e) {
+                            console.error(`   Error reading assets: ${e.message}`);
+                        }
+                    }
+                }
+                // Return 404, NOT HTML
+                return res.status(404).send(`File not found: ${req.path}`);
+            }
+            
+            // Check for other file extensions
             const hasExtension = /\.[a-zA-Z0-9]+$/.test(req.path);
             if (hasExtension) {
                 const requestedFile = path.join(absoluteFrontendPath, req.path);
                 console.error(`❌ Static file not found in catch-all: ${req.path}`);
                 console.error(`   Checked path: ${requestedFile}`);
                 console.error(`   File exists: ${existsSync(requestedFile)}`);
-                // Return 404 JSON, NOT HTML
-                return res.status(404).json({ 
-                    error: 'File not found',
-                    path: req.path,
-                    message: 'The requested static file does not exist. Make sure the frontend was built correctly.',
-                    checkedPath: requestedFile
-                });
+                // Return 404, NOT HTML
+                return res.status(404).send(`File not found: ${req.path}`);
             }
             
             // Serve index.html for all other routes (React Router)
