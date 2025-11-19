@@ -15,9 +15,9 @@ services:
       - key: PORT
         generateValue: true
       - key: CONNECTION_URI
-        sync: false  # Set in Render dashboard: mongodb+srv://ludo:ilyaas@ludo.1umgvpn.mongodb.net/ludo?retryWrites=true&w=majority&appName=ludo
+        value: mongodb+srv://ludo:ilyaas@ludo.1umgvpn.mongodb.net/ludo?retryWrites=true&w=majority&appName=ludo
       - key: JWT_SECRET
-        sync: false  # Set in Render dashboard: 8f9a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z7
+        value: 8f9a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z7
       - key: FRONTEND_URL
         value: https://somali-luda-eo83.onrender.com
       - key: GEMINI_API_KEY
